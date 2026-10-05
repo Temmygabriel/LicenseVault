@@ -1,7 +1,7 @@
 # LICENSEVAULT — LIVE BUILD PROGRESS
 
 > **This file is the running state of the project. It is updated at every phase boundary.**
-> Last updated: 2026-10-05 (BUILD 1 re-verification pass — explorer + faucet closed, three corrections made, 46 tests green)
+> Last updated: 2026-10-05 (BUILD 2 step 1 executed green — 12/12; explorer + faucet verified; three BUILD 1 corrections; 49 tests)
 
 **Repo:** https://github.com/Temmygabriel/LicenseVault
 **Local:** `C:\Users\USER\Documents\HACKATHONS BUILDS\BLI_LEGALTECH_HACK\LICENSEVAULT`
@@ -52,7 +52,7 @@ machine is 8 GB and the build step is deliberately not run here.
 |---|---|---|
 | BUILD 0 | Repo + environment | ✅ PASS — CI green (run `37311937901`) |
 | BUILD 1 | Protocol discovery | ✅ PASS — all core facts verified |
-| BUILD 2 | Real protected resource | ⬜ NEXT |
+| BUILD 2 | Real protected resource | ⏳ **step 1 DONE (12/12 PASS)** — steps 2+ blocked on a funded wallet |
 | BUILD 3 | Unauthorized read rejection | ⬜ NOT STARTED |
 | BUILD 4 | Real licensed access | ⬜ NOT STARTED |
 | BUILD 5 | Evidence + verifier | ⬜ NOT STARTED |
@@ -115,6 +115,73 @@ Two properties are worth calling out because they are structural, not stylistic:
    addresses. This is desirable here rather than pedantic: `conditionData` is written once
    at allocation and is **immutable**, so a transposed character would permanently gate the
    vault to the wrong writer with no recovery path.
+
+---
+
+## BUILD 2 — STEP 1 EXECUTED AND GREEN (2026-10-05)
+
+`npm run spike:check` (`tools/spike/check-network.ts`) now runs against live Aeneid and passes
+**12/12 checks**. It needs no wallet and sends no transaction. This is the first time any code
+in this repo has executed against the real protocol.
+
+```
+[PASS] chain id                chain 1315 — matches expected Story Aeneid 1315
+[PASS] rpc liveness            head block 24526722
+[PASS] DKG contract            0xCcCcCC…04 — deployed (1177 bytes)
+[PASS] CDR contract            0xCCCcCC…05 — deployed (1177 bytes)
+[PASS] LicenseReadCondition    0xC0640A…f7a3 — deployed (1407 bytes)
+[PASS] OwnerWriteCondition     0x4C9bFC…c34B — deployed (332 bytes)
+[PASS] LicenseToken            0xFe3838…C6bC — deployed (176 bytes)
+[PASS] CDR allocateFee()       0
+[PASS] CDR writeFee()          0
+[PASS] CDR readFee()           0
+[PASS] CDR maxEncryptedDataSize()  1024
+[PASS] LicenseToken identity   name()="Programmable IP License Token" symbol()="PILicenseToken"
+NETWORK: PASS   CONTRACTS: PASS   FINAL RESULT: PASS
+```
+
+### What running it revealed (three findings, not just a green tick)
+
+**1. The license token is now PROVEN, not inferred.** BUILD 1 rated
+`0xFe3838BF…C6bC` MEDIUM-HIGH on the basis that *bytecode exists and the docs use this
+address*. That is weak: it is a 176-byte EIP-1967 proxy, and a proxy's bytecode says nothing
+about what it proxies to. So the harness now asks the contract what it is — `name()` returns
+"Programmable IP License Token", `symbol()` returns "PILicenseToken", `totalSupply()` is
+68582. Combined with the implementation slot present in the bytecode, that is direct evidence
+this is Story's PILE license token. **Confidence: MEDIUM-HIGH → HIGH.** The identity is
+re-asserted on every harness run, so a proxy upgrade or a wrong address fails loudly at the
+harness instead of confusingly at mint time.
+
+**2. The vault payload cap is 1024 bytes — and that decides the architecture.**
+`maxEncryptedDataSize()` = 1024. A vault cannot hold a real file. This independently confirms
+the decision already taken for cost reasons: the vault protects the **data key** (32 bytes),
+and content encryption is performed by us with that key. Two separate reasons — the size cap
+and avoiding a paid `StorageProvider` — now point at the same design, which is the good kind
+of agreement.
+
+**3. All three protocol fees are currently 0.** `allocateFee` = `writeFee` = `readFee` = 0, so
+today the CDR flow costs gas only. Recorded as a **measurement, not a constant**: the values
+are mutable by the protocol, the SDK queries them live, and the contract requires `msg.value`
+to match exactly. Hard-coding a 0 would break the day the protocol sets a fee. No fee value
+appears anywhere in the codebase.
+
+Two guessed getter names were rejected and recorded as reverts rather than worked around:
+`maxEncodedDataSize()` (the real name is `maxEncryptedDataSize`) and `operationalThreshold()`
+(exposed under some other name, or read via the Observer). Neither is needed for BUILD 2.
+
+### BUILD 2 status
+
+| Step | Status |
+|---|---|
+| 1. Verify network + deployment (no wallet) | ✅ **DONE — 12/12 PASS** |
+| 2. Allocate a vault | ⬜ blocked on a funded wallet |
+| 3. Write encrypted data key | ⬜ blocked on a funded wallet |
+| 4. Prove unauthorized read is rejected | ⬜ blocked on a funded wallet |
+| 5. Mint a license token | ⬜ blocked on a funded wallet |
+| 6. Prove authorized read succeeds | ⬜ blocked on a funded wallet |
+| 7. Recover plaintext + save evidence | ⬜ blocked on a funded wallet |
+
+**Test count: 46 → 49.** Lint, typecheck, tests and the harness all green.
 
 ---
 

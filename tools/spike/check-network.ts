@@ -15,11 +15,13 @@ import { createPublicClient, http, getAddress } from "viem";
 import {
   AENEID_CHAIN_ID,
   AENEID_RPC_URL,
+  AENEID_LICENSE_TOKEN_ADDRESS,
+  AENEID_LICENSE_TOKEN_NAME,
+  AENEID_LICENSE_TOKEN_SYMBOL,
   CDR_ADDRESS,
   CDR_DKG_ADDRESS,
   LICENSE_READ_CONDITION_ADDRESS,
   OWNER_WRITE_CONDITION_ADDRESS,
-  AENEID_LICENSE_TOKEN_ADDRESS,
 } from "../../lib/protocol/constants";
 
 interface CheckResult {
@@ -108,34 +110,88 @@ async function main(): Promise<void> {
     }
   }
 
-  // ── 4. CDR allocation fee is readable (proves the CDR ABI is current) ──────
-  // If this selector no longer exists, the CDR ABI has changed and the build
+  // ── 4. CDR fee + size getters are readable (proves the CDR ABI is current) ──
+  // If these selectors no longer exist, the CDR ABI has changed and the build
   // contract requires us to stop rather than guess a new one.
+  const cdrGetters: Array<[string, string, boolean]> = [
+    // [label, signature, required]
+    ["allocateFee()", "allocateFee()", true],
+    ["writeFee()", "writeFee()", true],
+    ["readFee()", "readFee()", true],
+    ["maxEncryptedDataSize()", "maxEncryptedDataSize()", true],
+  ];
+
+  for (const [label, signature, required] of cdrGetters) {
+    try {
+      const value = await client.readContract({
+        address: getAddress(CDR_ADDRESS),
+        abi: [
+          {
+            name: signature.replace("()", ""),
+            type: "function",
+            stateMutability: "view",
+            inputs: [],
+            outputs: [{ type: "uint256" }],
+          },
+        ] as const,
+        functionName: signature.replace("()", "") as "allocateFee",
+      });
+      record(
+        `CDR ${label}`,
+        true,
+        `${value} — live value, never hard-coded` +
+          (label === "maxEncryptedDataSize()"
+            ? " (hard cap on a vault payload; the vault holds the KEY, not the content)"
+            : " wei"),
+      );
+    } catch (error) {
+      record(
+        label,
+        !required,
+        `could not read ${label}: ${error instanceof Error ? error.message : String(error)}. ` +
+          "If this fails, the CDR ABI has changed — re-verify before proceeding.",
+      );
+    }
+  }
+
+  // ── 5. The license token at our recorded address is really Story's ────────
+  // BUILD 1 rated this address MEDIUM-HIGH and said to re-read it before relying on
+  // it. This does exactly that: it asks the contract what it is, rather than trusting
+  // that the address is still the token we recorded. A proxy upgrade or a wrong
+  // address would show up here instead of failing later at mint time.
   try {
-    const fee = await client.readContract({
-      address: getAddress(CDR_ADDRESS),
-      abi: [
-        {
-          name: "allocateFee",
-          type: "function",
-          stateMutability: "view",
-          inputs: [],
-          outputs: [{ type: "uint256" }],
-        },
-      ] as const,
-      functionName: "allocateFee",
-    });
+    const [name, symbol] = await Promise.all([
+      client.readContract({
+        address: getAddress(AENEID_LICENSE_TOKEN_ADDRESS),
+        abi: [
+          { name: "name", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
+        ] as const,
+        functionName: "name",
+      }),
+      client.readContract({
+        address: getAddress(AENEID_LICENSE_TOKEN_ADDRESS),
+        abi: [
+          { name: "symbol", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
+        ] as const,
+        functionName: "symbol",
+      }),
+    ]);
+
+    const matches =
+      name === AENEID_LICENSE_TOKEN_NAME && symbol === AENEID_LICENSE_TOKEN_SYMBOL;
     record(
-      "CDR allocateFee()",
-      true,
-      `readable — ${fee} wei (this is a live value; it is never hard-coded)`,
+      "LicenseToken identity",
+      matches,
+      matches
+        ? `name()="${name}" symbol()="${symbol}" — matches the recorded PILE token`
+        : `MISMATCH — expected name()="${AENEID_LICENSE_TOKEN_NAME}" symbol()="${AENEID_LICENSE_TOKEN_SYMBOL}", ` +
+          `got name()="${name}" symbol()="${symbol}". STOP: this address is not the license token we recorded.`,
     );
   } catch (error) {
     record(
-      "CDR allocateFee()",
+      "LicenseToken identity",
       false,
-      `could not read allocateFee: ${error instanceof Error ? error.message : String(error)}. ` +
-        "If this fails, the CDR ABI has changed — re-verify before proceeding.",
+      `could not read name()/symbol(): ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 

@@ -5,10 +5,13 @@ import {
   AENEID_EXPLORER_URL,
   AENEID_FAUCET_URL,
   AENEID_LICENSE_TOKEN_ADDRESS,
+  AENEID_LICENSE_TOKEN_NAME,
+  AENEID_LICENSE_TOKEN_SYMBOL,
   AENEID_RPC_URL,
   CDR_ADDRESS,
   CDR_API_URL_AENEID,
   CDR_DKG_ADDRESS,
+  CDR_MAX_ENCRYPTED_DATA_SIZE_BYTES,
   CDR_NETWORK,
   LICENSE_READ_CONDITION_ADDRESS,
   OWNER_WRITE_CONDITION_ADDRESS,
@@ -59,6 +62,31 @@ describe("protocol addresses", () => {
   it("uses the documented CDR network label, not a chain id", () => {
     // The SDK takes "mainnet" | "testnet" here. Passing 1315 would be a silent bug.
     expect(CDR_NETWORK).toBe("testnet");
+  });
+});
+
+describe("license token identity", () => {
+  it("records the PILE token metadata read from chain", () => {
+    // These were read from the contract itself via name()/symbol() on 2026-10-05.
+    // check-network.ts asserts them against a live call on every run, so editing
+    // either value without re-reading the chain turns that harness red.
+    expect(AENEID_LICENSE_TOKEN_NAME).toBe("Programmable IP License Token");
+    expect(AENEID_LICENSE_TOKEN_SYMBOL).toBe("PILicenseToken");
+  });
+});
+
+describe("CDR vault size cap", () => {
+  it("records the 1024-byte cap that decides the architecture", () => {
+    // Live maxEncryptedDataSize() = 1024. A real file cannot fit in a vault, so the
+    // vault protects the DATA KEY and content encryption is ours. If this ever grows,
+    // that is a protocol change worth noticing rather than silently absorbing.
+    expect(CDR_MAX_ENCRYPTED_DATA_SIZE_BYTES).toBe(1024);
+  });
+
+  it("is large enough for a 32-byte data key with room for TDH2 overhead", () => {
+    // The smallest thing we ever put in a vault is a data key. If the cap ever fell
+    // below the key size, the core mechanism would become impossible, not just slow.
+    expect(CDR_MAX_ENCRYPTED_DATA_SIZE_BYTES).toBeGreaterThan(32);
   });
 });
 

@@ -52,11 +52,32 @@ export const OWNER_WRITE_CONDITION_ADDRESS =
 
 /**
  * Story LicenseToken contract on Aeneid.
- * Confidence MEDIUM-HIGH: live bytecode present, and used verbatim in the official
- * CONDITIONS.md example. Re-read at mint time before relying on it.
+ *
+ * PROVEN 2026-10-05 — upgraded from MEDIUM-HIGH. Live `eth_call` returned
+ * `name()` = "Programmable IP License Token", `symbol()` = "PILicenseToken", and
+ * `totalSupply()` = 68582. That is Story's PILE license token, confirmed by the
+ * contract's own metadata rather than by inference from a docs example.
+ * `check-network.ts` re-verifies the identity on every run, so a proxy upgrade at
+ * this address cannot silently change what we are minting from.
  */
 export const AENEID_LICENSE_TOKEN_ADDRESS =
   "0xFe3838BFb30B34170F00030B52eA4893d8aAC6bC" as const;
+
+/** Expected `name()` of the license token — asserted, not trusted. */
+export const AENEID_LICENSE_TOKEN_NAME = "Programmable IP License Token" as const;
+
+/** Expected `symbol()` of the license token — asserted, not trusted. */
+export const AENEID_LICENSE_TOKEN_SYMBOL = "PILicenseToken" as const;
+
+/**
+ * Hard cap the CDR contract enforces on a vault's encrypted payload: 1024 bytes.
+ * Verified live via `maxEncryptedDataSize()`.
+ *
+ * This is the constraint that settles the architecture. A file of any real size cannot
+ * go in a vault. The vault holds the **data key** (32 bytes); the content is encrypted
+ * with that key by us, off-chain. `docs/ARCHITECTURE.md` records the sequence.
+ */
+export const CDR_MAX_ENCRYPTED_DATA_SIZE_BYTES = 1024 as const;
 
 /**
  * Aeneid block explorer.

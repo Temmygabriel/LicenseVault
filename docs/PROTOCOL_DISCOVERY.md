@@ -268,17 +268,61 @@ CONFIDENCE:          HIGH
 IMPLEMENTATION IMPACT: vault writes are restricted to our server signer address.
 ```
 
-### FACT: Aeneid LicenseToken address
+### FACT: Aeneid LicenseToken address — PROVEN by the contract's own metadata
 ```
 FACT:                LicenseToken contract on Aeneid = 0xFe3838BFb30B34170F00030B52eA4893d8aAC6bC
+                     Live eth_call returns:
+                       name()        = "Programmable IP License Token"
+                       symbol()      = "PILicenseToken"
+                       totalSupply() = 68582
 SOURCE:              cdr-sdk docs/CONDITIONS.md example + live eth_getCode
+                     + live eth_call for name()/symbol()/totalSupply()
 VERIFIED DATE:       2026-10-05
 NETWORK:             Story Aeneid
-CONFIDENCE:          MEDIUM-HIGH — live bytecode present and used verbatim in the
-                     official docs example; still worth re-reading at mint time.
+CONFIDENCE:          HIGH — upgraded from MEDIUM-HIGH. The earlier rating rested on
+                     "bytecode exists and the docs use this address". This is stronger:
+                     the contract identifies itself as Story's PILE license token. We asked
+                     the contract what it is instead of inferring it.
 IMPLEMENTATION IMPACT: this is the first argument of LicenseReadCondition.conditionData.
+                     `tools/spike/check-network.ts` re-asserts name()/symbol() on every run,
+                     so a proxy upgrade or a wrong address fails the harness loudly rather
+                     than surfacing later as a confusing mint failure.
 ```
-Bytecode confirms an EIP-1967 proxy (`0x360894...bbc` implementation slot present).
+Bytecode confirms an EIP-1967 proxy (`0x360894...bbc` implementation slot present). Total
+bytecode is 176 bytes — small, which is why the metadata check matters more than the bytecode
+size: a proxy tells you nothing about what it proxies to, so we verified behaviour, not size.
+
+### FACT: the CDR vault payload cap is 1024 bytes — this decides the architecture
+```
+FACT:                maxEncryptedDataSize() = 1024
+SOURCE:              live eth_call to the CDR contract on Aeneid
+VERIFIED DATE:       2026-10-05
+CONFIDENCE:          HIGH — read directly from the deployed contract. The official docs also
+                     name `maxEncryptedDataSize` as a value the SDK caches from the chain.
+IMPLEMENTATION IMPACT: A vault cannot hold a real file. This settles the design: the vault
+                     protects the DATA KEY (32 bytes), and content encryption is performed by
+                     us with that key. It also independently confirms the decision to avoid
+                     the SDK's file API (which requires a StorageProvider) — see §5.
+                     The harness asserts this value so a change is noticed rather than
+                     silently absorbed.
+```
+Rejected guesses recorded for honesty: `maxEncodedDataSize()` and `operationalThreshold()`
+both revert. The correct name for the first is `maxEncryptedDataSize`; the operational
+threshold is evidently exposed under a different name or read through the Observer. Neither
+is needed for BUILD 2, so neither is guessed at.
+
+### FACT: all three CDR protocol fees are currently 0
+```
+FACT:                allocateFee() = 0 · writeFee() = 0 · readFee() = 0
+SOURCE:              live eth_call to the CDR contract on Aeneid, 2026-10-05
+VERIFIED DATE:       2026-10-05
+CONFIDENCE:          HIGH for the moment of measurement; the values are mutable by the
+                     protocol and MUST NOT be treated as permanent.
+IMPLEMENTATION IMPACT: on testnet today the CDR flow costs gas only. This is good for the $0
+                     path but is NOT recorded as a constant anywhere in the code — the SDK
+                     queries the live fee and the contract requires msg.value to equal it
+                     exactly. Hard-coding a 0 would break the moment the protocol sets a fee.
+```
 
 ---
 
@@ -531,7 +575,7 @@ IMPLEMENTATION IMPACT: the demo wallet needs testnet DATA; amounts must be read 
 | 7 | CDR contract | `0xCCCcCC0000000000000000000000000000000005` | HIGH |
 | 8 | LicenseReadCondition | `0xC0640AD4CF2CaA9914C8e5C44234359a9102f7a3` | HIGH |
 | 9 | OwnerWriteCondition | `0x4C9bFC96d7092b590D497A191826C3dA2277c34B` | HIGH |
-| 10 | LicenseToken (Aeneid) | `0xFe3838BFb30B34170F00030B52eA4893d8aAC6bC` | MED-HIGH |
+| 10 | LicenseToken (Aeneid) | `0xFe3838BFb30B34170F00030B52eA4893d8aAC6bC` | **HIGH** (was MED-HIGH) |
 | 11 | Condition interface | `checkReadCondition(uint32,bytes,bytes,address)` | HIGH |
 | 12 | License read encoding | `(licenseToken, ipId)` / `uint256[]` | HIGH |
 | 13 | SDK `apiUrl` configurable | yes | HIGH |
@@ -542,6 +586,10 @@ IMPLEMENTATION IMPACT: the demo wallet needs testnet DATA; amounts must be read 
 | 18 | `conditions.custom` is the license plug-in point | yes | HIGH |
 | 19 | Docs host | `docs.datafdn.org` (Story → Data Foundation rebrand; `docs.story.foundation` cert EXPIRED) | HIGH |
 | 20 | Official docs checksum for CDR address | **INVALID** — `0xCcCcCC…05` fails EIP-55 | HIGH |
+| 21 | LicenseToken identity | `name()` = "Programmable IP License Token", `symbol()` = "PILicenseToken" | HIGH |
+| 22 | CDR vault payload cap | `maxEncryptedDataSize()` = 1024 bytes | HIGH |
+| 23 | CDR protocol fees (measured 2026-10-05) | allocate = write = read = **0** | HIGH at that moment; mutable — never hard-coded |
+| 24 | `tools/spike/check-network.ts` | runs green: 12/12 checks, no wallet needed | PROVEN by execution |
 
 **BUILD 1 gate: PASS** — every fact required to implement the gated read is verified to HIGH
 confidence. As of the 2026-10-05 re-verification pass, facts 3 and 4 are now VERIFIED
