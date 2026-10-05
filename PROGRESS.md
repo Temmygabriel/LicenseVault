@@ -13,9 +13,9 @@
 
 | Phase | Name | Status |
 |---|---|---|
-| BUILD 0 | Repo + environment | ⏳ IN PROGRESS |
-| BUILD 1 | Protocol discovery | ⏳ IN PROGRESS |
-| BUILD 2 | Real protected resource | ⬜ NOT STARTED |
+| BUILD 0 | Repo + environment | ✅ PASS (CI green pending) |
+| BUILD 1 | Protocol discovery | ✅ PASS — all core facts verified |
+| BUILD 2 | Real protected resource | ⬜ NEXT |
 | BUILD 3 | Unauthorized read rejection | ⬜ NOT STARTED |
 | BUILD 4 | Real licensed access | ⬜ NOT STARTED |
 | BUILD 5 | Evidence + verifier | ⬜ NOT STARTED |
@@ -26,6 +26,29 @@
 | BUILD 10 | Demo / submission | ⬜ NOT STARTED |
 
 Legend: ⬜ not started · ⏳ in progress · ✅ PASS · 🚫 BLOCKED · ❌ FAILED
+
+### Phase reports
+
+**BUILD 0 — Repo + environment — PASS**
+Commit `d53df0e`. Files: `package.json`, `package-lock.json`, `tsconfig.json`,
+`next.config.ts`, `eslint.config.mjs`, `vitest.config.ts`, `.gitignore`, `.env.example`,
+`app/*`, `.github/workflows/ci.yml`, `README.md`.
+Dependencies: next 16.3.8, react 19.3.0, viem 2.57.3, @piplabs/cdr-sdk 0.2.2,
+@story-protocol/core-sdk 1.4.4, typescript 5.9.3, vitest 5.0.3.
+Gate (`install + lint + typecheck`): runs in GitHub Actions, not locally (8 GB machine).
+**Finding during first CI run:** ESLint 10 is incompatible with the plugins
+`eslint-config-next@16.3.8` depends on — `eslint-plugin-import`, `eslint-plugin-jsx-a11y`
+and `eslint-plugin-react` all peer-require `eslint ^9`. Pinned eslint to `9.39.5`, which is
+the version npm itself resolved. Lockfile regenerated.
+
+**BUILD 1 — Protocol discovery — PASS**
+Files: `docs/PROTOCOL_DISCOVERY.md`, `docs/PROTOCOL_DECISION.md`, `docs/CLAIM_STATUS.md`.
+Gate ("all core protocol facts verified"): met — see the table above. Three items are
+recorded as UNVERIFIED rather than guessed (explorer URL, faucet route, Vercel→Story-API
+reachability); none of them is required for BUILD 2.
+**Finding:** a genuine source conflict — `client.license.mintLicenseToken` is documented on
+cdr-sdk `main` but absent from the published 0.2.2 package. Recorded and resolved in
+`docs/PROTOCOL_DECISION.md` rather than silently worked around.
 
 ---
 
