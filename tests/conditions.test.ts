@@ -13,7 +13,11 @@ import {
 // Values from docs/PROTOCOL_DISCOVERY.md — verified, not invented.
 const LICENSE_TOKEN = "0xFe3838BFb30B34170F00030B52eA4893d8aAC6bC" as const;
 const IP_ID = "0x3Aa560C9072E0D4A1443CD192745C24A176b4925" as const;
-const WRITER = "0x7F000000000000000000000000000000000091C2" as const;
+// All-lowercase: viem skips EIP-55 checksum validation when there is no case
+// information, so this is a valid address to pass in.
+const WRITER = "0x7f000000000000000000000000000000000091c2" as const;
+// The same address in mixed case with a deliberately wrong checksum.
+const WRITER_BAD_CHECKSUM = "0x7F000000000000000000000000000000000091C2" as const;
 
 /** Left-pad a 20-byte address into a 32-byte ABI word. */
 function word(address: string): string {
@@ -74,6 +78,15 @@ describe("encodeOwnerWriteConditionData", () => {
       encodeOwnerWriteConditionData(WRITER),
     );
     expect(decoded.writer.toLowerCase()).toBe(WRITER.toLowerCase());
+  });
+
+  it("REJECTS an address with a bad EIP-55 checksum — a typo must not become a vault owner", () => {
+    // viem validates the mixed-case checksum. This matters here: conditionData is
+    // written once at allocation and is immutable, so a transposed character would
+    // permanently gate the vault to the wrong writer.
+    expect(() => encodeOwnerWriteConditionData(WRITER_BAD_CHECKSUM)).toThrow(
+      InvalidAddressError,
+    );
   });
 });
 

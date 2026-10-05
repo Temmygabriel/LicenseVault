@@ -1,12 +1,9 @@
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import { FlatCompat } from "@eslint/eslintrc";
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
+import nextTypeScript from "eslint-config-next/typescript";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({ baseDirectory: __dirname });
-
+// eslint-config-next 16 ships ESLint flat config directly, so these are spread in as
+// config objects. (The old `FlatCompat` bridge is for legacy eslintrc-style configs and
+// crashes on these — do not reintroduce it.)
 const eslintConfig = [
   {
     ignores: [
@@ -19,7 +16,8 @@ const eslintConfig = [
       "evidence/**",
     ],
   },
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  ...nextCoreWebVitals,
+  ...nextTypeScript,
   {
     rules: {
       // Protocol data is hex strings and bigints; `any` shows up at SDK boundaries.

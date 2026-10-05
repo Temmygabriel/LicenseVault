@@ -10,6 +10,7 @@ import {
   phaseForFailure,
   phaseLabel,
   reduceAccess,
+  type AccessEvent,
   type AccessState,
   type UnlockEvidence,
   type VerificationEvidence,
@@ -114,24 +115,80 @@ describe("success cannot be faked", () => {
     ).toThrow(IllegalTransitionError);
   });
 
-  it("has no event that produces UNLOCKED other than PLAINTEXT_RECOVERED", () => {
-    // Exhaustive over the event union: only PLAINTEXT_RECOVERED can unlock.
-    const s = reachUnlocked();
-    expect(s.phase).toBe("UNLOCKED");
+  it("reaches UNLOCKED from exactly one (phase, event) pair — exhaustively", () => {
+    // The strongest available statement: enumerate every phase and every event, and
+    // assert the ONLY combination that yields UNLOCKED is (ACCESSING, PLAINTEXT_RECOVERED).
+    // A transition the machine refuses throws, which is itself proof it did not unlock.
+    const states: AccessState[] = [
+      INITIAL_ACCESS_STATE,
+      reduceAccess(INITIAL_ACCESS_STATE, { type: "VERIFY_REQUESTED" }),
+      reduceAccess(reduceAccess(INITIAL_ACCESS_STATE, { type: "VERIFY_REQUESTED" }), {
+        type: "LICENSE_ABSENT",
+        evidence: {
+          wallet: WALLET,
+          chainId: 1315,
+          vaultUuid: 42,
+          basis: "read() reverted in LicenseReadCondition",
+          checkedAt: new Date("2026-10-05T00:00:00Z").toISOString(),
+        },
+      }),
+      reduceAccess(reduceAccess(INITIAL_ACCESS_STATE, { type: "VERIFY_REQUESTED" }), {
+        type: "LICENSE_CONFIRMED",
+        evidence: verification,
+      }),
+      reduceAccess(
+        reduceAccess(reduceAccess(INITIAL_ACCESS_STATE, { type: "VERIFY_REQUESTED" }), {
+          type: "LICENSE_CONFIRMED",
+          evidence: verification,
+        }),
+        { type: "READ_REQUESTED" },
+      ),
+      reachUnlocked(),
+      { phase: "VERIFICATION_ERROR", failure: { kind: "INFRASTRUCTURE_FAILURE", detail: "x" } },
+    ];
 
-    let mid = reduceAccess(INITIAL_ACCESS_STATE, { type: "VERIFY_REQUESTED" });
-    mid = reduceAccess(mid, { type: "LICENSE_CONFIRMED", evidence: verification });
-    mid = reduceAccess(mid, { type: "READ_REQUESTED" });
+    // Every phase of build-spec §11 is represented — otherwise this proves nothing.
+    expect(new Set(states.map((s) => s.phase)).size).toBe(7);
 
-    for (const event of [
+    const events: AccessEvent[] = [
       { type: "VERIFY_REQUESTED" },
       { type: "LICENSE_CONFIRMED", evidence: verification },
+      {
+        type: "LICENSE_ABSENT",
+        evidence: {
+          wallet: WALLET,
+          chainId: 1315,
+          vaultUuid: 42,
+          basis: "simulateContract reverted with ConditionNotMet",
+          checkedAt: new Date("2026-10-05T00:00:00Z").toISOString(),
+        },
+      },
+      { type: "VERIFICATION_FAILED", failure: { kind: "INFRASTRUCTURE_FAILURE", detail: "x" } },
       { type: "READ_REQUESTED" },
+      { type: "PLAINTEXT_RECOVERED", evidence: unlock },
       { type: "RESET" },
-    ] as const) {
-      const next = reduceAccess(mid, event);
-      expect(next.phase).not.toBe("UNLOCKED");
+    ];
+
+    const unlockedBy: string[] = [];
+
+    for (const state of states) {
+      for (const event of events) {
+        let next: AccessState;
+        try {
+          next = reduceAccess(state, event);
+        } catch (error) {
+          // A refused transition cannot be an unlock. Anything other than the two
+          // documented refusals is a real bug worth surfacing.
+          expect(error).toBeInstanceOf(IllegalTransitionError);
+          continue;
+        }
+        if (next.phase === "UNLOCKED") {
+          unlockedBy.push(`${state.phase} + ${event.type}`);
+        }
+      }
     }
+
+    expect(unlockedBy).toEqual(["ACCESSING + PLAINTEXT_RECOVERED"]);
   });
 });
 
