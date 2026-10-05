@@ -19,11 +19,21 @@ export const CDR_NETWORK = "testnet" as const;
 
 /** DKG contract (Aeneid). Verified: published @piplabs/cdr-contracts@0.2.2 + live bytecode. */
 export const CDR_DKG_ADDRESS =
-  "0xcccccc0000000000000000000000000000000004" as const;
+  "0xCcCcCC0000000000000000000000000000000004" as const;
 
-/** CDR contract (Aeneid). Verified: published @piplabs/cdr-contracts@0.2.2 + live bytecode. */
+/**
+ * CDR contract (Aeneid). Verified: published @piplabs/cdr-contracts@0.2.2 + live bytecode.
+ *
+ * NOTE the casing. The official runtime-configuration page prints this address as
+ * `0xCcCcCC…05`, which is an INVALID EIP-55 checksum — viem's `isAddress` rejects it.
+ * The address bytes are the same either way (checksum casing is error detection, not
+ * data), so this is a documentation typo rather than a different contract, but a
+ * copy-paste of the docs' form into any strict tool fails. `0xCCCcCC…05` is the
+ * verified-correct checksum, computed with viem's `getAddress` from the lowercase form.
+ * `tests/constants.test.ts` pins both addresses so this cannot silently regress.
+ */
 export const CDR_ADDRESS =
-  "0xcccccc0000000000000000000000000000000005" as const;
+  "0xCCCcCC0000000000000000000000000000000005" as const;
 
 /**
  * LicenseReadCondition (Aeneid).
@@ -51,12 +61,56 @@ export const AENEID_LICENSE_TOKEN_ADDRESS =
 /**
  * Aeneid block explorer.
  *
- * UNVERIFIED — deliberately left empty.
- * Build-spec §1.8 forbids rendering an explorer link that is not real, and §23 forbids
- * manufacturing one from a guessed hash. Until an explorer URL is confirmed, the Proof
- * surface must show identifiers WITHOUT links.
+ * VERIFIED 2026-10-05. Two independent checks:
+ *   1. Its block feed reported height 24525035, matching `eth_blockNumber` on the
+ *      Aeneid RPC (`0x17638eb` = 24525035) at the same moment.
+ *   2. `GET /tx/<hash>` returned HTTP 200 for a real transaction, the rendered page
+ *      contained that hash, and `eth_getTransactionByHash` confirmed the same tx.
+ *
+ * Note: the older `aeneid.storyscan.io` host still appears in third-party config
+ * blobs but is NXDOMAIN — Story's docs and explorer moved to the Data Foundation
+ * domains. Do not reintroduce it.
  */
-export const AENEID_EXPLORER_URL: string | null = null;
+export const AENEID_EXPLORER_URL = "https://aeneid.datanetscan.io" as const;
+
+/**
+ * Build an explorer link for a transaction hash.
+ *
+ * Only call this for a hash that actually exists on chain. Every hash that reaches
+ * the UI must come from a real protocol result — never a placeholder.
+ */
+export function explorerTxUrl(txHash: string): string {
+  return `${AENEID_EXPLORER_URL}/tx/${txHash}`;
+}
+
+/**
+ * DATA Foundation API REST endpoint — the `apiUrl` the CDRClient requires.
+ *
+ * This is the network's *documented* shared endpoint, and it is **plain HTTP on a raw
+ * IP**. The official docs describe it as possibly changing between deployments and
+ * recommend pointing `apiUrl` at your own node's REST gateway for production.
+ *
+ * It is therefore a DEFAULT, not a contract. Read it from the environment at runtime
+ * (`CDR_API_URL`) so it can be swapped without a code change, and treat any failure of
+ * this host as INFRASTRUCTURE_FAILURE — never as "no license".
+ *
+ * See `docs/SECURITY.md` §5 for the trust analysis: reads over this endpoint are
+ * integrity-protected by AEAD, so the exposure is availability (a read may time out),
+ * not confidentiality.
+ */
+export const CDR_API_URL_AENEID = "http://172.192.41.96:1317" as const;
+
+/**
+ * Aeneid testnet faucet.
+ *
+ * VERIFIED 2026-10-05: HTTP 200, and the page itself declares "Story Aeneid" and
+ * chain ID 1315, with the meta description "Claim your IP testnet tokens for free —
+ * one drip per network every 12 hours."
+ *
+ * Documented only. This project never automates a claim and never asks for a seed
+ * phrase; a human funds a disposable testnet wallet.
+ */
+export const AENEID_FAUCET_URL = "https://faucet.quicknode.com/story" as const;
 
 /** The condition interface version this adapter encodes for. */
 export const CONDITION_INTERFACE = {

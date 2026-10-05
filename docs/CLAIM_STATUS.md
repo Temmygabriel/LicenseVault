@@ -29,8 +29,12 @@ Allowed statuses, per build-spec §25:
 | 6 | The CDR SDK can be configured with a custom API endpoint | PROVEN | `apiUrl` is a required constructor parameter in the published `client.d.ts` |
 | 7 | A license-gated read is possible via CDR conditions | OBSERVED | described in official `docs/CONDITIONS.md`; **not yet reproduced by us** |
 | 8 | The published CDR SDK (0.2.2) can mint a Story license token itself | **UNSUPPORTED** | the documented `client.license.mintLicenseToken` is absent from the published package — see PROTOCOL_DISCOVERY.md §6 |
-| 9 | A TLS Story-API endpoint exists | UNVERIFIED | only a plain-HTTP raw-IP endpoint is documented |
+| 9 | A TLS Story-API endpoint exists | UNVERIFIED | only a plain-HTTP raw-IP endpoint is documented, and the docs actively advise self-hosting for production. Note the exposure is availability, not confidentiality — see SECURITY.md §5 |
 | 10 | Vercel can reach the CDR Story-API endpoint | UNVERIFIED | not yet tested |
+| 10a | The Aeneid explorer is `https://aeneid.datanetscan.io` | **PROVEN** | its block feed matched the Aeneid RPC head (24525035) at the same moment, and `GET /tx/<hash>` served a real tx that `eth_getTransactionByHash` confirmed — 2026-10-05 |
+| 10b | A working Aeneid faucet route exists | **PROVEN** (route) / UNVERIFIED (amount) | `https://faucet.quicknode.com/story` is HTTP 200 and its page declares Story Aeneid + chain 1315. The drip quantity is NOT verified — sources conflict and the faucet's own copy omits it |
+| 10c | The official docs' CDR address casing is valid | **DISPROVEN** | `0xCcCcCC…05` fails EIP-55. Our corrected constant `0xCCCcCC…05` is pinned by a test. The address bytes are identical — this is a docs typo, not a different contract |
+| 10d | The published 0.2.2 SDK exposes the documented high-level aliases | **PROVEN** | `createVault`/`readVault`/`createFileVault`/`readFileVault` present as declared aliases in `dist/commonjs/{uploader,consumer}.d.ts`. This corrects an incomplete earlier record |
 
 ## LicenseVault's own claims
 
@@ -40,7 +44,7 @@ Allowed statuses, per build-spec §25:
 | 12 | An unauthorized wallet is actually blocked | **UNVERIFIED** | must be shown by a real reverted read, not by UI copy |
 | 13 | An authorized wallet actually succeeds | **UNVERIFIED** | must be shown by a real recovered plaintext |
 | 14 | The access decision is produced by the protocol, not the UI | **UNVERIFIED** | architectural intent; proven only once #11–13 hold with the UI absent |
-| 15 | The core demo path costs $0 | UNVERIFIED | testnet gas is free-of-charge but requires faucet funds; see COST_MATRIX.md |
+| 15 | The core demo path costs $0 | UNVERIFIED | testnet gas is free-of-charge but requires faucet funds. The faucet ROUTE is now verified (#10b); the amount is not. The $0 claim still needs a real funded run to hold — see COST_MATRIX.md |
 | 16 | The gated flow is reproducible by a third party | **UNVERIFIED** | requires the verifier + evidence tree to exist first |
 
 ## Claims we explicitly DO NOT make

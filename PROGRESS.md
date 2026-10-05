@@ -1,11 +1,33 @@
 # LICENSEVAULT — LIVE BUILD PROGRESS
 
 > **This file is the running state of the project. It is updated at every phase boundary.**
-> Last updated: 2026-10-05 (Phase 1 — protocol discovery complete; local gate green, CI run pending)
+> Last updated: 2026-10-05 (BUILD 1 re-verification pass — explorer + faucet closed, three corrections made, 46 tests green)
 
 **Repo:** https://github.com/Temmygabriel/LicenseVault
 **Local:** `C:\Users\USER\Documents\HACKATHONS BUILDS\BLI_LEGALTECH_HACK\LICENSEVAULT`
 **Contracts read:** `LICENSEVAULT_BUILD_SPEC.md` (2005 lines) + `LICENSEVAULT_DEEPSEEK_MASTER_PROMPT.md` (1620 lines)
+
+---
+
+## CI — VERIFIED GREEN 2026-10-05 12:47 UTC
+
+**Run [37311937901](https://github.com/Temmygabriel/LicenseVault/actions/runs/37311937901) — `success` (38s) on commit `a39e860`.**
+
+| Job | Result | Steps that ran |
+|---|---|---|
+| `secret scan` | ✅ 4s | scan |
+| `install → lint → typecheck → test → build` | ✅ 34s | Install (lockfile-strict) · Lint · Typecheck · Unit tests · **Build** |
+
+Two firsts worth noting:
+
+- **`next build` has now actually run.** The production build had never been proven
+  before this run; BUILD 0's gate only claimed install + lint + typecheck.
+- **`npm ci` accepted the lockfile.** This is the first lockfile the strict install step
+  has not rejected, confirming the real-`npm install` regeneration was the correct fix.
+
+The two prior runs (`37306908020`, `37307775085`) failed on the ESLint-10 peer conflict and
+on the secret-scan false positive + inconsistent lockfile respectively. Both causes are now
+fixed and covered, not merely passed over.
 
 ---
 
@@ -18,8 +40,9 @@
 | Tests | `npm test` | ✅ **31 passed / 31** (2 files) |
 | Lockfile sync | `npm ci --dry-run` | ✅ 408 packages, no mismatch |
 
-CI (`GitHub Actions`) re-runs the same gate plus `next build`; its result is authoritative
-because the local machine is 8 GB and the build step is deliberately not run here.
+CI re-runs the same gate plus `next build`; its result is authoritative because the local
+machine is 8 GB and the build step is deliberately not run here.
+
 
 ---
 
@@ -27,7 +50,7 @@ because the local machine is 8 GB and the build step is deliberately not run her
 
 | Phase | Name | Status |
 |---|---|---|
-| BUILD 0 | Repo + environment | ✅ PASS — local gate green, CI re-run pending |
+| BUILD 0 | Repo + environment | ✅ PASS — CI green (run `37311937901`) |
 | BUILD 1 | Protocol discovery | ✅ PASS — all core facts verified |
 | BUILD 2 | Real protected resource | ⬜ NEXT |
 | BUILD 3 | Unauthorized read rejection | ⬜ NOT STARTED |
@@ -92,6 +115,121 @@ Two properties are worth calling out because they are structural, not stylistic:
    addresses. This is desirable here rather than pedantic: `conditionData` is written once
    at allocation and is **immutable**, so a transposed character would permanently gate the
    vault to the wrong writer with no recovery path.
+
+---
+
+## BUILD 1 RE-VERIFICATION PASS — 2026-10-05 (afternoon)
+
+BUILD 1 was re-run rather than trusted. It found that the protocol's documentation had moved,
+closed both previously-UNVERIFIED items, and produced three corrections. Recorded here in full
+because two of them change what the code does.
+
+### Closed: the two UNVERIFIED items
+
+| Item | Was | Now |
+|---|---|---|
+| Aeneid explorer | UNVERIFIED | **VERIFIED** `https://aeneid.datanetscan.io` |
+| Aeneid faucet route | UNVERIFIED | **VERIFIED** `https://faucet.quicknode.com/story` (amount still UNVERIFIED) |
+
+The explorer was confirmed two independent ways: its block feed reported height **24525035**
+while the Aeneid RPC returned `eth_blockNumber` = `0x17638eb` = **24525035** (same height →
+same chain), and `GET /tx/<real hash>` returned HTTP 200 with the hash present on the rendered
+page while `eth_getTransactionByHash` confirmed the same transaction. The faucet was confirmed
+by HTTP 200 plus the page's own structured data declaring "Story Aeneid" (17×) and chain 1315.
+
+**Deliberately still UNVERIFIED: the faucet drip amount.** Third-party sources contradict each
+other and the faucet's own copy (5 IP/24h vs a base drip on a 12-hour cooldown vs 0.1 IP/day).
+Rather than pick the most plausible-sounding number, it is recorded as unknown — and it does
+not matter, because the harness reads `allocateFee()`/`writeFee()`/`readFee()` from chain.
+
+### Correction 1 — the SDK surface list was incomplete (changes the code)
+
+`createVault` / `readVault` / `createFileVault` / `readFileVault` / `downloadFile` /
+`getRegisteredValidators` **do exist in published 0.2.2** — verified by grepping the shipped
+`dist`, not by trusting the docs. They are declared aliases (`Uploader.createVault =
+uploadCDR`, etc.). The earlier BUILD 1 note implied the whole high-level surface was
+unreleased; only `mintLicenseToken` is, and that conclusion is unchanged.
+
+**Consequence:** `uploadFile`/`downloadFile` **require a `StorageProvider`** (Helia /
+Storacha / Synapse). Choosing the file API would put a third-party storage network on the
+critical path. The core path therefore uses `uploadCDR`/`accessCDR` — the vault protects the
+**data key**, content encryption is ours, and **no storage service is involved at all**.
+This decides the $0 path and is recorded in `docs/COST_MATRIX.md`.
+
+### Correction 2 — the official docs contain an invalid checksum (changes the code)
+
+The Data Foundation's CDR runtime-configuration page prints the CDR address as
+`0xCcCcCC0000000000000000000000000000000005`. **That casing is not a valid EIP-55 checksum** —
+viem's `isAddress` rejects it. The correct checksum, computed from the lowercase form, is
+`0xCCCcCC0000000000000000000000000000000005`. The DKG address in the same table *is* correct.
+
+The address bytes are identical either way — EIP-55 casing is error detection, not data — so
+this is a documentation typo rather than a different contract. But a copy-paste of the docs'
+form into any strict tool fails, so `constants.ts` uses the computed-correct casing and
+`tests/constants.test.ts` pins **both** facts: that ours validates, and that the docs' does
+not. That test stops a future contributor "fixing" our constant back to the broken form.
+
+Worth noting *how* this was caught: the same validation that earlier rejected our own test
+fixture (a hand-typed address with a bad checksum) is what rejected the official
+documentation. Strict validation earned its keep twice.
+
+### Correction 3 — the protocol rebranded, and its docs host is broken
+
+- `story.foundation` and `www.story.foundation` now **HTTP 308 → `https://www.datafdn.org/`**
+  ("The Data Foundation"). Story Protocol is being presented as the Data Foundation / Data
+  Network, consistent with the IP → DATA token rename.
+- `docs.story.foundation` **serves an expired TLS certificate** — valid 2026-05-26 →
+  **expired 2026-08-24**, i.e. roughly six weeks stale as of today. The CDR documentation has
+  moved to `https://docs.datafdn.org` (Mintlify; every page also available as `.md`, plus an
+  `llms.txt` index).
+
+**No on-chain value changed.** The Aeneid RPC still returns chain id 1315 (`0x523`), and every
+contract address in `constants.ts` remains live. This is a naming and documentation-location
+change, not a protocol change.
+
+### The §7 endpoint risk — characterised, and its severity revised DOWN
+
+The current docs **reconfirm** `apiUrl = http://172.192.41.96:1317`, still plain HTTP on a raw
+IP, still the only Aeneid value, now explicitly labelled *"Plain HTTP. May change between
+deployments."*, with the recommendation to point `apiUrl` at your own node for production. So
+the risk is **confirmed and still open** — not resolved.
+
+But the SDK docs also state the trust model outright: partials come from `/dkg/cdr_partials`,
+the keeper verifies validator signatures on ingress and drops them, and **"the SDK trusts the
+keeper at the same level as any other authoritative chain RPC read."** Working that through:
+
+| Property | Holds? |
+|---|---|
+| Confidentiality of the data key | ✅ partials are ECIES-encrypted to the reader's ephemeral key |
+| Integrity of recovered content | ✅ a forged partial fails the AES-GCM auth check — **fails closed** |
+| Availability of a read | ❌ an attacker, or a moved/down endpoint, can time the read out |
+| Authorization deniability | ✅ the gate is evaluated on chain, before any partial is served |
+
+**The exposure is availability, not confidentiality.** That is materially less severe than
+"plain HTTP leaks the key", and `docs/SECURITY.md` §5 has been revised accordingly (medium →
+low–medium). The concrete consequence encoded in the build: a failure on this path is
+`INFRASTRUCTURE_FAILURE` and must **never** become `NO_LICENSE` — a dropped partial is not a
+missing licence.
+
+### Also confirmed
+
+- `conditions.custom({ address, conditionData })` is the exact plug-in point for our
+  `LicenseReadCondition`: the SDK forwards pre-encoded bytes and never needs to know what a
+  licence is. Our `encodeLicenseReadConditionData()` output feeds it directly.
+- The SDK still ships **no built-in licence condition helper**, confirming our decision to own
+  that encoding.
+- `createVault` exposes `skipConditionValidation` (default `false`). Validation stays **ON** —
+  a condition address without the expected interface should fail loudly at allocation, not
+  silently at read time.
+
+### Files changed by this pass
+
+`lib/protocol/constants.ts` (explorer verified, `explorerTxUrl()`, corrected CDR checksum,
+`CDR_API_URL_AENEID`, `AENEID_FAUCET_URL`) · `tests/constants.test.ts` (new, 15 tests) ·
+`.env.example` · `docs/PROTOCOL_DISCOVERY.md` · `docs/SECURITY.md` §5 · `docs/COST_MATRIX.md`
+(Notes A and A2, not-used table) · `docs/CLAIM_STATUS.md` (claims 9, 10a–10d, 15).
+
+**Test count: 31 → 46.** Lint, typecheck and tests all clean locally.
 
 ---
 
@@ -238,14 +376,17 @@ and avoids depending on unreleased `main`-branch code.
 
 ## BLOCKERS
 
-**No hard blocker.** One dependency on a user action:
+**No hard blocker.** One dependency on a user action, and it now has a verified route:
 
-| Item | Needs | Impact |
-|---|---|---|
-| BUILD 2 step 2+ | A funded disposable Aeneid wallet (faucet route currently `UNVERIFIED`) | Blocks all on-chain work: allocate, mint, read, decrypt |
+| Item | Needs | Impact | Route |
+|---|---|---|---|
+| BUILD 2 step 2+ | A funded disposable Aeneid wallet | Blocks all on-chain work: allocate, mint, read, decrypt | **VERIFIED**: `https://faucet.quicknode.com/story` (HTTP 200, declares Story Aeneid + chain 1315). Amount per drip UNVERIFIED — a human claims it |
 
-The Story-API endpoint risk (§7) is tracked, not blocking BUILD 2–5; it must be resolved
-before BUILD 9.
+Funding is a **manual, human step**. This project never automates a claim and never asks for a
+seed phrase or private key.
+
+The Story-API endpoint risk (§7) is confirmed open but characterised: **availability, not
+confidentiality**. It does not block BUILD 2–5 and must be resolved before BUILD 9.
 
 
 ---

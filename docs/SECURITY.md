@@ -137,29 +137,51 @@ These are guaranteed by types, not by discipline:
 
 ## 5. Open security issue — the CDR Story-API endpoint
 
-**Severity: medium. Status: OPEN.**
+**Severity: low–medium. Status: OPEN. Exposure: availability, not confidentiality.**
 
-The Story-API REST endpoint currently documented by the CDR SDK is
-`http://172.192.41.96:1317` — **plain HTTP on a raw IP**, so:
+The Story-API REST endpoint documented by the CDR SDK is `http://172.192.41.96:1317` —
+**plain HTTP on a raw IP**. The current official docs confirm this is still the only Aeneid
+value, label it "Plain HTTP. May change between deployments.", and advise pointing `apiUrl`
+at your own node's REST gateway for production.
 
-- responses (DKG global public key, validator partial decryptions) are **not authenticated
-  in transit**;
-- a network attacker could modify them.
+**The endpoint is in the trust path — this is stated by the SDK, not inferred.** The published
+`Consumer` docs say partials come from `/dkg/cdr_partials`, that the keeper verifies each
+validator's signature on ingress and *drops the signature bytes*, and that **"the SDK trusts
+the keeper at the same level as any other authoritative chain RPC read."** So the transport is
+unauthenticated and the SDK is relying on that host being honest and available.
 
-**Why it is not catastrophic.** Partial decryptions are ECIES-encrypted to the reader's
-public key and combined via TDH2 before the payload's AES-GCM authentication tag is checked.
-Tampering should therefore surface as a *decryption failure* (safe — `DECRYPTION_FAILED`,
-never `UNLOCKED`) rather than as a forged unlock. The SDK also notes it trusts the keeper to
-filter partials by requester.
+**What that does and does not expose** (worked through in `docs/PROTOCOL_DISCOVERY.md` §7):
 
-**Why it still matters.** A tampered or unavailable endpoint is a denial of service on the
-demo, and plain HTTP on a raw IP is not an acceptable long-term dependency for a product.
+| Property | Holds | Basis |
+|---|---|---|
+| Confidentiality of the data key | ✅ | Partials are ECIES-encrypted to the reader's ephemeral public key; the private key never leaves the client. Intercepting a partial reveals nothing usable. |
+| Integrity of recovered content | ✅ | The SDK's own text: a misrouted partial "would not yield a meaningful ECIES decryption… the resulting garbage bytes would propagate through `tdh2Combine` and ultimately fail at the outermost AES-GCM auth check." The vault ciphertext is read from chain, not from this endpoint. Tampering **fails closed**. |
+| Availability of a read | ❌ | An attacker — or the endpoint simply being down or moved — can prevent the poll reaching threshold, timing out the read. |
+| Authorization deniability | ✅ | The gate is `LicenseReadCondition`, evaluated on chain before the read transaction. The REST host serves partials only after the chain has already permitted the read. |
+
+**Consequence the code must encode.** A failure on this path is `INFRASTRUCTURE_FAILURE`, and
+must **never** become `NO_LICENSE`. A dropped partial is not a missing licence. This is the
+concrete scenario that rule exists for; `classifyThrownError` routes timeouts to
+`INFRASTRUCTURE_FAILURE` and `tests/state.test.ts` pins it.
+
+**Mitigations already in place.** `apiUrl` is a constructor parameter, not a constant;
+`CDR_API_URL_AENEID` records the documented default, and `.env.example` exposes `CDR_API_URL`
+so it can be repointed without a code change. The endpoint is treated as an operational
+dependency that can move, not as a fixed address.
+
+**Available but not yet adopted.** `collectPartials` / `accessCDR` accept `attestationConfig`,
+which verifies each validator's SGX enclave (MRENCLAVE / MRSIGNER / SVN) before accepting a
+partial and reports untrusted ones via `onInvalidPartial`. The docs note the attestation
+reports come from the per-round cache, so this adds no request. **Decision deferred to
+BUILD 8** — it hardens against a dishonest validator, which is a related but distinct concern
+from a dishonest transport, and it is not needed to demonstrate the mechanism.
 
 **Planned resolution (BUILD 9, before deployment).**
 1. Test reachability from a Vercel serverless function.
-2. If reachable only over plain HTTP, run our own Story node's `:1317` REST gateway, or
-   front the endpoint with TLS on infrastructure we control.
-3. Re-read the SDK docs to check whether an official TLS endpoint has appeared.
+2. If reachable only over plain HTTP, run our own node's `:1317` REST gateway, or front the
+   endpoint with TLS on infrastructure we control.
+3. Re-read the docs at `docs.datafdn.org` (note: `docs.story.foundation` currently serves an
+   **expired certificate**) to check whether an official TLS endpoint has appeared.
 
 **Per build-spec §7: if neither is viable, the correct outcome is to report `BLOCKED`, not to
 invent a workaround.** That instruction is recorded here so it survives to BUILD 9.

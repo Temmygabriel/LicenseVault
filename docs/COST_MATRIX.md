@@ -23,12 +23,38 @@ is behind a paywall or a credit purchase.
 | **Vercel** | Frontend hosting | Hobby (free) | $0 | Free-tier bandwidth/function limits apply | **Not re-verified today** — see note B | Yes (free account) | Hobby tier is subject to fair-use limits | vercel.com | **Not verified** | **Mandatory** (BUILD 9) |
 | **Node.js + npm** | Build + run | Local, already installed | $0 | n/a | No | No | Node 24 / npm 11 present | n/a | 2026-10-05 | **Mandatory** |
 
-### Note A — faucet route is UNVERIFIED
+### Note A — faucet route now VERIFIED; the drip *amount* is not
 
-Candidate faucet URLs returned HTTP 403, which is consistent with bot protection and does
-**not** confirm the route exists. The exact faucet URL must be confirmed before we instruct
-the user to fund a wallet, and it must be confirmed again at demo time. Per build-spec §1.1
-we will not publish a guessed faucet URL.
+**Resolved 2026-10-05.** `https://faucet.quicknode.com/story` returns HTTP 200, and the page
+itself declares "Story Aeneid" and chain ID 1315, with the meta description "Claim your IP
+testnet tokens for free — one drip per network every 12 hours." That is enough to give a human
+a concrete funding route, and it is recorded as `AENEID_FAUCET_URL`.
+
+**What is still not verified: the quantity per drip.** Third-party sources disagree with each
+other and with the faucet's own copy (5 IP/24h vs a base drip on a 12-hour cooldown vs
+0.1 IP/day). The faucet's own description does not state an amount. Rather than pick the
+most plausible-sounding number, the amount is recorded as **UNVERIFIED** — and it does not
+affect the build, because the harness reads `allocateFee()` / `writeFee()` / `readFee()` from
+chain at runtime instead of assuming a required balance.
+
+The official Story faucet hosts (`faucet.story.foundation`,
+`aeneid.faucet.story.foundation`) both return HTTP 403, consistent with bot protection.
+403 neither confirms nor denies the route, so they are recorded as **INCONCLUSIVE** and are
+not used.
+
+Per build-spec §1.1 no guessed faucet URL is published, and no faucet amount is asserted.
+
+### Note A2 — no storage service is on the critical path (decided 2026-10-05)
+
+The CDR SDK offers a file-based flow — `uploadFile` / `downloadFile`, aliased as
+`createFileVault` / `readFileVault` — but those methods **require a `StorageProvider`**
+(Helia / Storacha / Synapse ship in the SDK). That would put a third-party storage network
+with its own availability and pricing on the critical path.
+
+The core path therefore uses `uploadCDR` / `accessCDR`, where the vault protects the
+**data key** and content encryption is ours. The demo payload is encrypted with that key and
+is small. **Result: no external storage dependency, no pinning service, no per-GB cost.** The
+file API is listed as deliberately-not-used below.
 
 ### Note B — Vercel free-tier terms not re-verified today
 
@@ -53,7 +79,8 @@ Each of these was considered and rejected, because a $0 core path is a hard requ
 | Rejected | Why |
 |---|---|
 | Paid RPC providers (Alchemy, Infura paid tiers) | Aeneid's public RPC works and costs nothing. Adding a paid provider would put the core path behind a card. |
-| Paid storage (Pinata paid, Storacha paid tiers) | Not needed for BUILD 2 — the smallest real vault keeps the payload tiny. Revisit only if the file path is chosen, and only on a free tier. |
+| **Any `StorageProvider` (Helia / Storacha / Synapse)** | The SDK's `uploadFile`/`downloadFile` methods *require* one. Choosing them would put a third-party storage network — with its own availability and pricing — on the critical path. `uploadCDR`/`accessCDR` protect the **data key** with no storage provider at all. Decided 2026-10-05, see Note A2. |
+| Paid storage (Pinata paid, Storacha paid tiers) | Not needed — the smallest real vault keeps the payload tiny, and the core path uses no storage network at all. |
 | Paid hosting other than Vercel | The spec names Vercel. |
 | Paid databases (Supabase paid, Neon paid) | **No database is needed at all.** Build-spec §1.19: a local database must never become the authorization source of truth. The chain is the source of truth. Not adding one removes a whole class of problems. |
 | Paid AI / LLM APIs | Explicitly out of MVP scope (build-spec §1.15, §31). |
