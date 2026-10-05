@@ -1,0 +1,92 @@
+name: CI
+
+# Heavy work runs here, not on the 8 GB dev machine (master prompt §6/§7).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: install → lint → typecheck → test → build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install (lockfile-strict)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          # Placeholder values so the build can run without secrets.
+          # Real values are supplied by Vercel, never committed here.
+          NEXT_PUBLIC_STORY_CHAIN_ID: "1315"
+          NEXT_PUBLIC_STORY_RPC_URL: "https://aeneid.storyrpc.io"
+
+  secret-scan:
+    name: secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Build-spec §33: a committed private key is an automatic NO-GO.
+      - name: Fail on committed private keys / seed phrases
+        run: |
+          set -euo pipefail
+          echo "Scanning tracked files for secret material..."
+
+          # A 0x-prefixed 64-hex private key, but allow the known protocol
+          # constants and placeholder text in docs.
+          if git grep -nEI '0x[a-fA-F0-9]{64}' -- . \
+              ':!package-lock.json' ':!*.md' ':!evidence/**' > /tmp/hits.txt; then
+            echo "::error::Possible private key found in tracked source:"
+            cat /tmp/hits.txt
+            exit 1
+          fi
+
+          # Never allow a NEXT_PUBLIC_ private key (build-spec §9.11).
+          if git grep -nEI 'NEXT_PUBLIC_[A-Z_]*PRIVATE_KEY' -- . > /tmp/pub.txt; then
+            echo "::error::A private key must never use the NEXT_PUBLIC_ prefix:"
+            cat /tmp/pub.txt
+            exit 1
+          fi
+
+          # .env files must not be tracked.
+          if git ls-files | grep -E '(^|/)\.env($|\.)' | grep -v '\.env\.example'; then
+            echo "::error::A .env file is tracked. Only .env.example may be committed."
+            exit 1
+          fi
+
+          echo "OK — no secret material found in tracked files."

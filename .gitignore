@@ -1,0 +1,57 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# production
+/build
+/dist
+
+# testing
+/coverage
+
+# misc
+.DS_Store
+*.pem
+Thumbs.db
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files — NEVER commit real secrets
+# .env.example IS committed (safe placeholders only)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# vercel
+.vercel
+
+# wallet / secret material — belt and braces
+*.key
+*.keystore
+keystore/
+secrets/
+wallet*.json
+mnemonic*
+seed*
+
+# temporary dumps and probe artefacts
+/tmp/
+*.tgz
+scratch/
+
+# local editor/agent settings
+.claude/
