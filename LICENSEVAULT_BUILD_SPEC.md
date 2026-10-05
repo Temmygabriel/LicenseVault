@@ -1346,3 +1346,660 @@ INDEPENDENTLY VERIFIABLE EVIDENCE
 ```
 
 Only after that is LicenseVault ready to become a polished product.
+
+
+---
+
+# 37. LOCKED PREMIUM PRODUCT ART DIRECTION SYSTEM
+
+This section applies the design system from the repository document:
+PREMIUM_PRODUCT_ART_DIRECTION_UIUX_BUILD_SYSTEM.md
+
+The coding agent MUST follow that system in addition to this build specification.
+
+The design sequence is:
+
+PRODUCT MECHANISM → PRODUCT STORY → VISUAL CONCEPT → SIGNATURE INTERACTION → DESIGN GRAMMAR → SCREEN ARCHITECTURE → COMPONENTS → IMPLEMENTATION → VISUAL QA
+
+Do NOT reverse this sequence.
+
+---
+
+# 38. PRODUCT FORENSICS — DESIGN SOURCE OF TRUTH
+
+Before implementing visual components, the agent must understand:
+
+### What LicenseVault actually does
+LicenseVault protects a digital resource and uses the licensing state attached to the relevant Story IP relationship as part of the access condition.
+
+### Highest-value action
+VERIFY LICENSE
+
+### Core user outcome
+A licensed user can access protected content; an unlicensed user cannot.
+
+### Core technical mechanism
+
+IP RIGHTS → LICENSE STATE → ACCESS CONDITION → PROTECTED READ → ALLOWED / REJECTED
+
+### Product magic moment
+
+ACCESS RESTRICTED → VERIFY LICENSE → LICENSE VERIFIED → ACCESS GRANTED → PROTECTED CONTENT OPENS
+
+This state transition MUST influence the visual identity.
+
+---
+
+# 39. LOCKED VISUAL THESIS
+
+Use this exact thesis as the design foundation:
+
+> LicenseVault should feel like a precision archival access system because the product turns a legal licensing right into a real gate for protected digital content.
+
+Reference adjectives:
+- editorial
+- credible
+- tactile
+- precise
+- restrained
+
+Do NOT replace these with generic terms such as modern, futuristic, premium Web3, minimal, sleek, cyber, or enterprise.
+
+---
+
+# 40. LOCKED PRODUCT WORLD — THE LICENSED ARCHIVE
+
+The physical-world metaphor is:
+
+> A carefully maintained archive containing valuable restricted material, where the right credential opens access to a specific record or file.
+
+The interface should feel like a modern digital version of that archive.
+
+The product is NOT visually represented as:
+- a courthouse;
+- a law office;
+- a crypto exchange;
+- a cybersecurity terminal;
+- an NFT gallery;
+- a banking dashboard.
+
+The archive metaphor should be subtle and contemporary.
+
+No fake leather, parchment, quills, gold seals, or historical role-play.
+
+Use the metaphor through:
+- ruled records;
+- document-like panels;
+- indexed metadata;
+- accession/reference numbers;
+- deliberate borders;
+- paper-like surfaces;
+- restrained labeling;
+- controlled reveal.
+
+---
+
+# 41. PRIMARY PRODUCT OBJECT — ACCESS DOCKET
+
+The Access Docket is the visual identity anchor.
+
+It is NOT a generic card.
+
+It should look like a structured archival access record.
+
+Conceptual structure:
+
+LICENSEVAULT
+ACCESS DOCKET
+────────────────────────────
+PROTECTED ASSET
+Commercial Brand Asset Pack
+
+LICENSE REQUIRED
+Commercial Use
+
+LICENSE HOLDER
+0x7F...91C2
+
+ACCESS
+RESTRICTED
+
+[ VERIFY LICENSE ]
+
+Successful state:
+
+LICENSEVAULT
+ACCESS DOCKET
+────────────────────────────
+PROTECTED ASSET
+Commercial Brand Asset Pack
+
+LICENSE
+Commercial Use
+
+STATUS
+✓ VERIFIED
+
+ACCESS
+GRANTED
+
+[ OPEN PROTECTED ASSET ]
+
+Visual rules:
+- strong document header;
+- thin horizontal rules;
+- high information hierarchy;
+- small metadata labels;
+- one strong status;
+- one obvious primary action;
+- restrained border treatment;
+- mostly squared geometry;
+- no floating card wall.
+
+The object should look useful before it looks decorative.
+
+---
+
+# 42. HERO COMPOSITION — LOCKED
+
+The landing page must NOT use a generic hero → three cards → feature grid → testimonials composition.
+
+Use a product narrative.
+
+Desktop first viewport:
+
+LEFT: product proposition and action.
+RIGHT: dominant Access Docket.
+
+Required above the fold:
+- LicenseVault name;
+- headline;
+- short product explanation;
+- protected asset;
+- license requirement;
+- current access state;
+- primary action.
+
+Preferred headline:
+A license should open the door.
+
+Preferred supporting line:
+LicenseVault turns an onchain IP license into a real access permission for protected digital content.
+
+Primary CTA:
+CHECK ACCESS
+
+Small technology note may say BUILT WITH STORY or BUILT WITH STORY + CDR only when that wording accurately reflects the verified implementation and current event context.
+
+Do not lead with blockchain architecture, sponsor logos, tokenomics, AI, statistics, or generic Web3 artwork.
+
+---
+
+# 43. APPROVED VISUAL REFERENCE
+
+A generated cream/editorial LicenseVault UI concept board was created during design review.
+
+Use that board as a visual direction reference for:
+- overall composition;
+- archival/editorial mood;
+- Access Docket structure;
+- thin rules;
+- warm paper canvas;
+- restrained copper accents;
+- quiet green verified states;
+- image treatment;
+- desktop/mobile relationship.
+
+It is NOT a pixel-perfect wireframe and is NOT a source for copying exact assets or text.
+
+Do NOT reintroduce the earlier dark purple/blue Web3 dashboard treatment. That direction is explicitly rejected.
+
+---
+
+# 44. COLOR SYSTEM — LOCKED
+
+Named semantic tokens:
+
+--canvas: #F4F1E8
+--surface: #F9F7F1
+--ink: #1C1D1B
+--text-secondary: #686B66
+--border-subtle: #D4D0C5
+--border-strong: #BDB8AC
+--accent-copper: #A7613C
+--success-green: #2E6650
+--error-red: #8C3737
+--info-slate: #526575
+
+Usage:
+- canvas dominates;
+- surface creates document layers;
+- ink carries hierarchy;
+- copper is for primary actions and tiny accents;
+- green marks verified/allowed state;
+- red marks restricted/error;
+- slate is informational only.
+
+Never make the page primarily copper, green, red, purple, or blue.
+
+Semantic state colors must always be paired with text.
+
+---
+
+# 45. TYPOGRAPHY — LOCKED
+
+Preferred stack:
+
+Display: Newsreader
+Interface: IBM Plex Sans
+Data: IBM Plex Mono
+
+Hierarchy:
+- large editorial hero statement;
+- clear section titles;
+- readable body copy;
+- uppercase/tightly tracked labels;
+- mono for wallet addresses, IDs, and technical references.
+
+Typography should create hierarchy through size, weight, line height, tracking, and whitespace.
+
+Do NOT make every hierarchy level depend on colored boxes.
+
+Verify font availability and licensing before shipping.
+
+---
+
+# 46. GEOMETRY — LOCKED
+
+Preferred geometry:
+- mostly rectangular surfaces;
+- small corner radius;
+- thin borders;
+- tactile document framing;
+- restrained shadows.
+
+Avoid:
+- giant rounded containers;
+- pill-shaped everything;
+- oversized floating glass cards.
+
+Suggested starting values:
+- radius-small: 4px;
+- radius-medium: 8px;
+- radius-large: 12px only when genuinely useful;
+- border: 1px;
+- visible focus ring: at least 2px.
+
+These are starting tokens and may only change for accessibility/responsiveness or a demonstrably better product-specific result.
+
+---
+
+# 47. SPACING / DENSITY — LOCKED
+
+Overall density:
+BALANCED EDITORIAL
+
+Use a consistent scale based on:
+4 / 8 / 12 / 16 / 24 / 32 / 48 / 64 / 96
+
+The page should breathe without feeling empty.
+
+Major rhythm:
+- generous hero whitespace;
+- compact metadata groups;
+- moderate section spacing;
+- denser proof records where useful.
+
+Do not create huge empty areas solely to appear luxurious.
+
+---
+
+# 48. MATERIAL / SURFACE LANGUAGE
+
+Surfaces should feel subtly physical.
+
+Allowed:
+- paper-like tone differences;
+- faint grain/noise only when it improves tactility;
+- ruled lines;
+- slight inset or soft shadow around important document surfaces.
+
+Avoid:
+- photorealistic leather;
+- heavy paper texture;
+- fake 3D embossing;
+- glossy glass;
+- giant shadows;
+- dramatic cinematic lighting.
+
+The interface should feel crafted, not themed.
+
+---
+
+# 49. ICONOGRAPHY
+
+Icons should be:
+- restrained;
+- line-based;
+- consistent in stroke weight;
+- functional.
+
+Useful semantic icons:
+- document;
+- lock;
+- license;
+- check;
+- shield;
+- arrow;
+- external link;
+- wallet.
+
+Do not use an icon merely to decorate every label.
+
+No giant security-shield hero illustration.
+
+---
+
+# 50. IMAGE DIRECTION
+
+Images are optional and should support the asset/archive concept.
+
+Preferred:
+- editorial photography or tasteful generated imagery;
+- clear subject;
+- muted natural tones;
+- strong crop;
+- no embedded text;
+- no crypto symbols.
+
+For the demo:
+- one primary protected asset;
+- small preview;
+- larger recovered view after access.
+
+Do not create a fake marketplace full of invented thumbnails.
+
+---
+
+# 51. PRODUCT COMPONENT LANGUAGE
+
+Visible components MUST use product-specific names:
+
+AccessDocket
+ProtectedAsset
+LicenseRecord
+AccessGate
+LicenseStatus
+VerificationTrace
+UnlockAction
+ProofReceipt
+WalletControl
+NetworkBadge
+
+Avoid visible names such as Card, StatCard, InfoCard, DashboardCard, Web3Card, and FeatureCard.
+
+Generic primitives are acceptable internally.
+The visible interface must speak LicenseVault's language.
+
+---
+
+# 52. SIGNATURE INTERACTION — LOCKED
+
+Name:
+VERIFY → ALIGN → OPEN
+
+Trigger:
+VERIFY LICENSE
+
+Before:
+ACCESS RESTRICTED
+
+Transition:
+Real license/protected-read verification.
+
+After:
+LICENSE VERIFIED
+then ACCESS GRANTED
+then protected resource reveal.
+
+Meaning:
+The user's licensing state changes what the system permits.
+
+Proof:
+The final result links to actual protocol evidence.
+
+This interaction is the visual heart of LicenseVault.
+
+---
+
+# 53. STATE VISUAL LANGUAGE
+
+LOCKED
+- neutral paper surface;
+- copper action;
+- red only for restricted status;
+- access threshold visually closed.
+
+CHECKING
+- quiet centered activity;
+- no fake percentage;
+- restrained motion.
+
+NO LICENSE
+- explicit restricted status;
+- explanatory copy;
+- view requirement / retry action where appropriate.
+
+LICENSE VERIFIED
+- green status;
+- stronger rule or outline;
+- concise explanation.
+
+ACCESSING
+- controlled transition;
+- content remains protected until read/decryption completes.
+
+UNLOCKED
+- content becomes visible;
+- proof remains accessible;
+- success does not overpower the asset.
+
+ERROR
+- specific cause;
+- safe retry.
+
+---
+
+# 54. SIGNATURE MOTION
+
+The motion metaphor is a threshold opening.
+
+Successful sequence:
+LOCKED → VERIFY → validation completes → VERIFIED → protected content reveals.
+
+Recommended micro-transition duration:
+160ms–320ms.
+
+Major reveal may be slightly longer only if it remains purposeful.
+
+Respect prefers-reduced-motion.
+
+Without motion, all states must remain immediately understandable.
+
+---
+
+# 55. PROOF SCREEN — ART DIRECTION
+
+The proof surface should feel like an audit record, not a blockchain explorer clone.
+
+Structure:
+
+ONCHAIN PROOF
+PROTECTED ASSET
+IP ASSET
+LICENSE TERMS
+LICENSE TOKEN
+LICENSE HOLDER
+CDR VAULT
+READ RESULT
+NETWORK
+
+Use ruled rows, aligned metadata, concise labels, and mono typography for technical strings.
+
+The proof must answer:
+WHY DID ACCESS OPEN?
+
+---
+
+# 56. SCREEN ARCHITECTURE
+
+Use the narrative:
+
+LANDING → ASSET DETAIL → ACCESS GATE → VERIFYING → RESULT → PROTECTED RESOURCE → PROOF
+
+Do not create a separate page for every state.
+States should normally be expressed inside the core product surface.
+
+---
+
+# 57. INFORMATION ARCHITECTURE
+
+## Landing
+Goal: understand LicenseVault.
+Primary: CHECK ACCESS.
+Secondary: HOW IT WORKS.
+
+## Asset Detail
+Goal: understand what is protected and what right is required.
+Primary: VERIFY LICENSE.
+
+## Access Gate
+Goal: understand whether access is allowed.
+Primary: VERIFY LICENSE.
+
+## Result
+Goal: understand the authorization decision.
+Primary: OPEN PROTECTED ASSET.
+Secondary: VIEW PROOF.
+
+## Protected Resource
+Goal: view recovered content.
+Primary: VIEW PROOF.
+
+## Proof
+Goal: independently verify why access opened.
+Primary: relevant explorer/evidence action.
+
+---
+
+# 58. NAVIGATION
+
+Navigation remains restrained.
+
+Potential top-level items:
+- Assets;
+- How It Works.
+
+Wallet control remains visible.
+
+Do NOT add analytics, billing, settings, integrations, or enterprise administration unless a later verified requirement requires them.
+
+---
+
+# 59. MICROCOPY PRINCIPLES
+
+Voice:
+- direct;
+- calm;
+- precise;
+- confident without legal overclaiming.
+
+Good:
+- ACCESS RESTRICTED;
+- LICENSE REQUIRED;
+- LICENSE VERIFIED;
+- ACCESS GRANTED;
+- VIEW ONCHAIN PROOF.
+
+Bad:
+- Your decentralized legal compliance journey begins here;
+- AI-powered rights intelligence;
+- Blockchain-secured super access;
+- Trustless ownership verification.
+
+Copy must describe the actual mechanism.
+
+---
+
+# 60. PREMIUM ART-DIRECTION COMPLIANCE AUDIT
+
+Before UI implementation is considered ready, the coding agent must verify compliance with PREMIUM_PRODUCT_ART_DIRECTION_UIUX_BUILD_SYSTEM.md:
+
+1. Product forensics exists.
+2. Product world is explicitly named.
+3. One-sentence visual thesis exists.
+4. Reference extraction is separated from copying.
+5. Core mechanism is visible in the interface.
+6. Signature interaction is defined.
+7. Information architecture exists before component creation.
+8. Design tokens are explicit.
+9. Negative design rules are explicit.
+10. Product-specific component vocabulary is used.
+11. State coverage includes unhappy paths.
+12. Technical honesty is enforced.
+13. Judge comprehension is tested.
+14. Anti-AI visual test is performed.
+15. Visual quality is scored against the 20/24 threshold.
+
+If any item is missing, visual implementation is NOT ready.
+
+---
+
+# 61. VISUAL QUALITY GATE
+
+Score 0–2:
+- product clarity;
+- product-specific identity;
+- technical mechanism visibility;
+- hierarchy;
+- typography;
+- spacing/density;
+- signature interaction;
+- state coverage;
+- motion;
+- mobile;
+- technical honesty;
+- judge proof.
+
+Target: 20/24 minimum.
+
+Any score of 0 in product clarity, product identity, mechanism visibility, or technical honesty triggers redesign.
+
+---
+
+# 62. DESIGN FREEZE
+
+Once the first complete implementation contains the Access Docket, real gated read, major states, and responsive layout, freeze the visual language.
+
+Do not subsequently add gradients, extra accent colors, dashboard surfaces, decorative cards, or unrelated pages merely to make the application look larger.
+
+Spend remaining effort on:
+- protocol truth;
+- accessibility;
+- responsive polish;
+- evidence;
+- error states;
+- performance;
+- demo quality.
+
+---
+
+# 63. FINAL DESIGN PRINCIPLE
+
+> Do not make LicenseVault look premium. Make LicenseVault look like LicenseVault.
+
+The identity comes from:
+
+LICENSE + PROTECTED RESOURCE + ACCESS CONDITION + VERIFICATION + UNLOCK + PROOF
+
+That is the locked design system.
