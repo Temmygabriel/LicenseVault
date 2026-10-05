@@ -1,0 +1,71 @@
+name: BUILD 2 spike — real lock, real unlock
+
+# MANUAL ONLY. This job is handed a private key, so it must never run automatically on a
+# push, a PR, or a schedule. Starting it is a deliberate human action.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Evidence directory name"
+        required: false
+        default: "licensevault-aeneid-001"
+
+# Read-only, on purpose. A job that holds a private key should have the smallest possible
+# blast radius, so it cannot push to the repository. The evidence it produces is uploaded as
+# an artifact and committed deliberately, by a human, from a machine that has reviewed it.
+permissions:
+  contents: read
+
+jobs:
+  spike:
+    name: Allocate → deny → mint → unlock
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # Injected at runtime from repository secrets. Never written into this file, never
+      # echoed, never printed by the harness. Disposable Aeneid testnet wallets only.
+      AENEID_PRIVATE_KEY: ${{ secrets.AENEID_PRIVATE_KEY }}
+      AENEID_READER_PRIVATE_KEY: ${{ secrets.AENEID_READER_PRIVATE_KEY }}
+      CDR_API_URL: http://172.192.41.96:1317
+      LICENSEVAULT_RUN_ID: ${{ inputs.run_id }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install (lockfile-strict)
+        run: npm ci
+
+      - name: Check the wallets are configured and funded
+        # Addresses only — the harness derives them from the keys. Nothing here prints a key.
+        run: |
+          if [ -z "$AENEID_PRIVATE_KEY" ]; then
+            echo "::error::AENEID_PRIVATE_KEY is not set. Run: gh secret set AENEID_PRIVATE_KEY"
+            exit 1
+          fi
+          if [ -z "$AENEID_READER_PRIVATE_KEY" ]; then
+            echo "::error::AENEID_READER_PRIVATE_KEY is not set."
+            exit 1
+          fi
+          echo "Both wallet secrets are present."
+
+      - name: Run the spike
+        run: npm run spike:vault
+
+      - name: Upload evidence
+        # if: always() — evidence from a FAILED run is the most useful evidence there is.
+        # A partial run must be inspectable, not discarded.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-${{ inputs.run_id }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 30

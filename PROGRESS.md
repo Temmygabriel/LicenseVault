@@ -1,7 +1,7 @@
 # LICENSEVAULT — LIVE BUILD PROGRESS
 
 > **This file is the running state of the project. It is updated at every phase boundary.**
-> Last updated: 2026-10-05 (BUILD 2 step 1 executed green — 12/12; explorer + faucet verified; three BUILD 1 corrections; 49 tests)
+> Last updated: 2026-10-05 (BUILD 2 steps 2–7 harness written and locally green — 58 tests; still blocked on a funded wallet)
 
 **Repo:** https://github.com/Temmygabriel/LicenseVault
 **Local:** `C:\Users\USER\Documents\HACKATHONS BUILDS\BLI_LEGALTECH_HACK\LICENSEVAULT`
@@ -31,13 +31,15 @@ fixed and covered, not merely passed over.
 
 ---
 
-## LOCAL GATE — measured 2026-10-05 13:43
+## LOCAL GATE — measured 2026-10-05 21:40
 
 | Check | Command | Result |
 |---|---|---|
 | Lint | `npm run lint` | ✅ clean (0 errors, 0 warnings) |
 | Typecheck | `npm run typecheck` | ✅ clean |
-| Tests | `npm test` | ✅ **31 passed / 31** (2 files) |
+| Tests | `npm test` | ✅ **58 passed / 58** (4 files) |
+| Network check | `npm run spike:check` | ✅ **12/12 PASS** against live Aeneid |
+| Spike harness guards | `npm run spike:vault` | ✅ reached live Aeneid, stopped cleanly at the funding precondition (exit 1, no crash) |
 | Lockfile sync | `npm ci --dry-run` | ✅ 408 packages, no mismatch |
 
 CI re-runs the same gate plus `next build`; its result is authoritative because the local
@@ -52,15 +54,14 @@ machine is 8 GB and the build step is deliberately not run here.
 |---|---|---|
 | BUILD 0 | Repo + environment | ✅ PASS — CI green (run `37311937901`) |
 | BUILD 1 | Protocol discovery | ✅ PASS — all core facts verified |
-| BUILD 2 | Real protected resource | ⏳ **step 1 DONE (12/12 PASS)** — steps 2+ blocked on a funded wallet |
-| BUILD 3 | Unauthorized read rejection | ⬜ NOT STARTED |
-| BUILD 4 | Real licensed access | ⬜ NOT STARTED |
-| BUILD 5 | Evidence + verifier | ⬜ NOT STARTED |
-| BUILD 6 | Core application | ⬜ NOT STARTED |
-| BUILD 7 | Visual implementation | ⬜ NOT STARTED |
-| BUILD 8 | Security / hardening | ⬜ NOT STARTED |
-| BUILD 9 | Vercel deployment | ⬜ NOT STARTED |
-| BUILD 10 | Demo / submission | ⬜ NOT STARTED |
+| BUILD 2 | Minimal protocol spike | ⏳ **step 1 DONE (12/12)**; steps 2–8 harness written and locally green — execution blocked on funded wallets |
+| BUILD 3 | Evidence + verifier | ⬜ NOT STARTED (the spike already writes partial evidence) |
+| BUILD 4 | Protocol adapter | ⬜ NOT STARTED |
+| BUILD 5 | Product UI (four surfaces) | ⬜ NOT STARTED |
+| BUILD 6 | Visual system | ⬜ NOT STARTED |
+| BUILD 7 | Security / adversarial | ⬜ NOT STARTED |
+| BUILD 8 | Deployment (Vercel) | ⬜ NOT STARTED |
+| BUILD 9 | Submission | ⬜ NOT STARTED |
 
 Legend: ⬜ not started · ⏳ in progress · ✅ PASS · 🚫 BLOCKED · ❌ FAILED
 
@@ -98,14 +99,16 @@ reachability); none of them is required for BUILD 2.
 cdr-sdk `main` but absent from the published 0.2.2 package. Recorded and resolved in
 `docs/PROTOCOL_DECISION.md` rather than silently worked around.
 
-### Test suite — what it actually proves (31 tests)
+### Test suite — what it actually proves (58 tests, 4 files)
 
 | File | Tests | Proves |
 |---|---|---|
 | `tests/conditions.test.ts` | 13 | ABI encoding matches the documented condition formats byte-for-byte; malformed addresses, bad EIP-55 checksums, empty token lists and negative ids are all **refused** rather than encoded |
 | `tests/state.test.ts` | 18 | The access state machine cannot be talked into `UNLOCKED`; only an authorization refusal reaches `NO_LICENSE`; timeouts and unknown errors never do |
+| `tests/constants.test.ts` | 18 | Every protocol address is a valid EIP-55 address; the docs' invalid CDR checksum is pinned; the live-read license token metadata and the 1024-byte vault cap are recorded as assertions, not comments |
+| `tests/content.test.ts` | 9 | Protected content round-trips byte for byte, and a **wrong key, a tampered ciphertext, or a truncated blob all THROW** rather than returning bytes |
 
-Two properties are worth calling out because they are structural, not stylistic:
+Three properties are worth calling out because they are structural, not stylistic:
 
 1. **`UNLOCKED` is reachable from exactly one (phase, event) pair.** The test enumerates
    all 7 phases × all 7 events and asserts the only combination producing `UNLOCKED` is
@@ -115,6 +118,11 @@ Two properties are worth calling out because they are structural, not stylistic:
    addresses. This is desirable here rather than pedantic: `conditionData` is written once
    at allocation and is **immutable**, so a transposed character would permanently gate the
    vault to the wrong writer with no recovery path.
+3. **A wrong key never yields content.** The AEAD auth tag is the project's integrity
+   backstop: the CDR read path trusts a remote keeper, so a misrouted partial would produce
+   a wrong key. `decryptContent` throws on tag mismatch, which is what makes "ACCESS
+   GRANTED" mean something. The test suite asserts that failure, because a silent
+   fallback there would turn the whole product claim into theatre.
 
 ---
 
@@ -173,15 +181,74 @@ Two guessed getter names were rejected and recorded as reverts rather than worke
 
 | Step | Status |
 |---|---|
-| 1. Verify network + deployment (no wallet) | ✅ **DONE — 12/12 PASS** |
-| 2. Allocate a vault | ⬜ blocked on a funded wallet |
-| 3. Write encrypted data key | ⬜ blocked on a funded wallet |
-| 4. Prove unauthorized read is rejected | ⬜ blocked on a funded wallet |
-| 5. Mint a license token | ⬜ blocked on a funded wallet |
-| 6. Prove authorized read succeeds | ⬜ blocked on a funded wallet |
-| 7. Recover plaintext + save evidence | ⬜ blocked on a funded wallet |
+| 1. Verify network + deployment (no wallet) | ✅ **DONE — 12/12 PASS** (`npm run spike:check`) |
+| 2. Allocate a vault | ✅ **HARNESS WRITTEN** — ready, needs funded wallets |
+| 3. Write encrypted data key | ✅ **HARNESS WRITTEN** — ready, needs funded wallets |
+| 4. Ask the gate directly (free `eth_call` probes) | ✅ **HARNESS WRITTEN** — ready, needs funded wallets |
+| 5. Prove unauthorized read is rejected | ✅ **HARNESS WRITTEN** — ready, needs funded wallets |
+| 6. Mint a license token | ✅ **HARNESS WRITTEN** — ready, needs funded wallets |
+| 7. Prove authorized read succeeds | ✅ **HARNESS WRITTEN** — ready, needs funded wallets |
+| 8. Recover plaintext + save evidence | ✅ **HARNESS WRITTEN** — ready, needs funded wallets |
 
-**Test count: 46 → 49.** Lint, typecheck, tests and the harness all green.
+Steps 2–8 are implemented in `tools/spike/build-vault.ts` (`npm run spike:vault`). **None of them
+has been executed against the network yet** — nothing here should be described as working. What
+is proven about the harness today is: it typechecks, it lints, its non-network logic is unit
+tested, and its guards fire correctly (verified by running it: it reached live Aeneid, read chain
+1315, and stopped cleanly at the funding precondition).
+
+**Test count: 46 → 49 → 58.** Lint clean, typecheck clean, `check-network` 12/12, all guards
+verified by execution.
+
+### What the BUILD 2 harness does, and how it refuses to lie
+
+`tools/spike/build-vault.ts` runs eight steps in an order that is itself the proof:
+
+```
+environment → asset → vault → gate → denied → mint → gate → read → unlock
+```
+
+**The ordering is the argument.** `denied` and `read` are the *same call from the same wallet*.
+The only thing that changes between them is whether a license token exists. That is what makes
+this a demonstration of the mechanism rather than of two different code paths.
+
+Four deliberate refusals to over-claim:
+
+1. **The gate is read back off the chain.** After allocation, the harness compares the vault's
+   stored `readConditionData` with the bytes it encoded. If they differ it STOPS — because a
+   denial against a differently-gated vault would prove nothing.
+2. **The condition contract is asked directly**, four times, with free `eth_call`s: no aux data;
+   a fabricated token id; the real token id; and — the one that matters — the real token id
+   presented by a *non-holder*. A revert here is recorded as a **failure**, never as a denial,
+   since an unreadable gate and a closed gate are not the same thing.
+3. **A denial must be authorization-shaped.** The assertion is not "the error said X". It is: no
+   data key returned AND the failure looks like an authorization refusal. A timeout, an RPC
+   error or an empty vault all also return no data key, and any of them passing as a
+   "successful denial" would be a false result.
+4. **`dataKeySha256` and `plaintextSha256` are fingerprints, not the secrets.** The data key is
+   never written into `evidence/` — publishing it would let anyone decrypt the asset without a
+   license and make the whole demonstration meaningless. The plaintext hash is computed *before*
+   any unlock is claimed and compared *after*, so it cannot be back-filled.
+
+The harness also destroys the key when the run completes: no copy of it exists on disk
+afterwards. `tests/content.test.ts` holds the other half of that promise — a wrong key, a
+tampered ciphertext, or a truncated blob all **throw**, so a false unlock is not reachable.
+
+### Secrets handling for the funded run
+
+Two fresh disposable wallets were generated locally; the private keys live only in
+`secrets/*.key` (gitignored — `git check-ignore` confirms) and in GitHub Actions repository
+secrets. Neither key has ever been written to a repo file, a log line, or a command argument.
+
+| Wallet | Address | Balance |
+|---|---|---|
+| owner (asset, vault, license mint) | `0x75D900D18866D8aA416CCEFD9e85D2C61dB0aCa9` | `0x0` |
+| reader (the refused-then-allowed reader) | `0x226e01730F6991C1BD11f58d1204638bee89A863` | `0x0` |
+
+`.github/workflows/spike.yml` runs the harness on a GitHub runner so the 8 GB dev machine does
+not have to. It is `workflow_dispatch`-only — a job holding a key must never run on a push — and
+it has `permissions: contents: read` on purpose, so it *cannot* push. Evidence is uploaded as an
+artifact (including from failed runs, which is when it matters most) and committed deliberately
+after review.
 
 ---
 
@@ -443,17 +510,35 @@ and avoids depending on unreleased `main`-branch code.
 
 ## BLOCKERS
 
-**No hard blocker.** One dependency on a user action, and it now has a verified route:
+**One blocker, and it is now a single human action — nothing else is waiting.**
 
 | Item | Needs | Impact | Route |
 |---|---|---|---|
-| BUILD 2 step 2+ | A funded disposable Aeneid wallet | Blocks all on-chain work: allocate, mint, read, decrypt | **VERIFIED**: `https://faucet.quicknode.com/story` (HTTP 200, declares Story Aeneid + chain 1315). Amount per drip UNVERIFIED — a human claims it |
+| BUILD 2 steps 2–8 execution | Two disposable Aeneid wallets funded with IP (gas) | Blocks every on-chain step: allocate, write, deny, mint, read, decrypt | **VERIFIED faucet**: `https://faucet.quicknode.com/story`. Amount per drip UNVERIFIED — a human claims it |
+
+The wallets already exist and their keys are already in place, so funding is the only remaining
+step:
+
+| Wallet | Address | Purpose | Balance |
+|---|---|---|---|
+| owner | `0x75D900D18866D8aA416CCEFD9e85D2C61dB0aCa9` | creates the IP asset + terms, allocates and writes the vault, mints the license | `0x0` |
+| reader | `0x226e01730F6991C1BD11f58d1204638bee89A863` | the wallet refused a read *before* the mint and allowed *after* it | `0x0` |
+
+Once funded, the run is one command locally (`npm run spike:vault`) or one manual dispatch of
+`.github/workflows/spike.yml`, which does the work on a GitHub runner instead of the 8 GB dev
+machine.
+
+Two smaller dependencies, neither blocking BUILD 2:
+
+- The faucet's **drip amount is UNVERIFIED** — if one drip does not cover ~6 transactions per
+  wallet, the run needs a second drip after the 12-hour cooldown. The harness resumes rather
+  than repeating on-chain work, so a partial run is not wasted.
+- The Story-API endpoint risk (§7) is confirmed open but characterised: **availability, not
+  confidentiality**. It does not block BUILD 2–8 and must be resolved before BUILD 9.
 
 Funding is a **manual, human step**. This project never automates a claim and never asks for a
-seed phrase or private key.
-
-The Story-API endpoint risk (§7) is confirmed open but characterised: **availability, not
-confidentiality**. It does not block BUILD 2–5 and must be resolved before BUILD 9.
+seed phrase or private key. The keys were generated locally by the project itself and are held
+only in gitignored files and in GitHub Actions repository secrets.
 
 
 ---
