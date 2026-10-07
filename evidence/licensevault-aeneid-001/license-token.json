@@ -1,0 +1,18 @@
+{
+  "observedAt": "2026-10-07T17:16:46.233Z",
+  "chainId": 1315,
+  "licenseTokenId": "73227",
+  "licenseTokenContract": "0xFe3838BFb30B34170F00030B52eA4893d8aAC6bC",
+  "holder": "0x226e01730F6991C1BD11f58d1204638bee89A863",
+  "licensorIpId": "0x6C6046f021093c54F43663Fad93037E6556Bfdd8",
+  "licenseTermsId": "2183",
+  "amount": 1,
+  "mintingFeePaid": "0",
+  "transactions": [
+    {
+      "operation": "mint license token",
+      "txHash": "0xf66ca3499c7c49adf5b8e10ddc7b31f02ca6fbeca7ffbd36b4be0127e27296d3",
+      "explorerUrl": "https://aeneid.datanetscan.io/tx/0xf66ca3499c7c49adf5b8e10ddc7b31f02ca6fbeca7ffbd36b4be0127e27296d3"
+    }
+  ]
+}

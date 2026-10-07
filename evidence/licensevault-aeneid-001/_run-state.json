@@ -1,0 +1,31 @@
+{
+  "runId": "licensevault-aeneid-001",
+  "startedAt": "2026-10-07T17:08:56.323Z",
+  "chainId": 1315,
+  "wallets": {
+    "owner": "0x75D900D18866D8aA416CCEFD9e85D2C61dB0aCa9",
+    "reader": "0x226e01730F6991C1BD11f58d1204638bee89A863",
+    "readerIsOwner": false
+  },
+  "asset": {
+    "spgNftContract": "0x52bA3120c58056D0c9be496950C3864E056b0B7a",
+    "ipId": "0x6C6046f021093c54F43663Fad93037E6556Bfdd8",
+    "nftTokenId": "1",
+    "licenseTermsId": "2183",
+    "txHashes": {
+      "createCollection": "0x914a14602d5785f7228c8a9ca7cedaab433c787b31c6c601398a155bcd9040dc",
+      "mintAndRegister": "0x574454f964858b4c918a255ff854ed0d36c153da64baacfdbc8722eb8d17d800"
+    }
+  },
+  "plaintextSha256": "46cab4a8232e4eea226500b424416a353618c8606008d374dbb15f56bc864cd7",
+  "vault": {
+    "uuid": 11062,
+    "allocateTxHash": "0x53a78ecc8eee79c28f38e488029b4f810c7b52c65d216650a75bded3827ba006",
+    "writeTxHash": "0x37c52af6a0b2fe3dac9accfcfacb9b1debd13ae40167cba3be0a2034a4c88e6b"
+  },
+  "license": {
+    "licenseTokenId": "73227",
+    "txHash": "0xf66ca3499c7c49adf5b8e10ddc7b31f02ca6fbeca7ffbd36b4be0127e27296d3",
+    "mintedTo": "0x226e01730F6991C1BD11f58d1204638bee89A863"
+  }
+}

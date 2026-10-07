@@ -1,0 +1,38 @@
+{
+  "observedAt": "2026-10-07T17:22:05.182Z",
+  "chainId": 1315,
+  "uuid": 11062,
+  "updatable": false,
+  "readCondition": {
+    "address": "0xC0640AD4CF2CaA9914C8e5C44234359a9102f7a3",
+    "conditionData": "0x000000000000000000000000fe3838bfb30b34170f00030b52ea4893d8aac6bc0000000000000000000000006c6046f021093c54f43663fad93037e6556bfdd8",
+    "decoded": {
+      "licenseTokenAddress": "0xFe3838BFb30B34170F00030B52eA4893d8aAC6bC",
+      "ipId": "0x6C6046f021093c54F43663Fad93037E6556Bfdd8"
+    },
+    "meaning": "only holders of a license token for this IP may read"
+  },
+  "writeCondition": {
+    "address": "0x4C9bFC96d7092b590D497A191826C3dA2277c34B",
+    "conditionData": "0x00000000000000000000000075d900d18866d8aa416ccefd9e85d2c61db0aca9",
+    "meaning": "only 0x75D900D18866D8aA416CCEFD9e85D2C61dB0aCa9 may write"
+  },
+  "encryptedDataBytes": 235,
+  "contentType": "application/json — the brand pack delivery manifest",
+  "plaintextSha256": "46cab4a8232e4eea226500b424416a353618c8606008d374dbb15f56bc864cd7",
+  "dataKeyBytes": 32,
+  "transactions": [
+    {
+      "operation": "allocate vault",
+      "txHash": "0x53a78ecc8eee79c28f38e488029b4f810c7b52c65d216650a75bded3827ba006",
+      "explorerUrl": "https://aeneid.datanetscan.io/tx/0x53a78ecc8eee79c28f38e488029b4f810c7b52c65d216650a75bded3827ba006",
+      "contract": "0xCCCcCC0000000000000000000000000000000005"
+    },
+    {
+      "operation": "write encrypted data key",
+      "txHash": "0x37c52af6a0b2fe3dac9accfcfacb9b1debd13ae40167cba3be0a2034a4c88e6b",
+      "explorerUrl": "https://aeneid.datanetscan.io/tx/0x37c52af6a0b2fe3dac9accfcfacb9b1debd13ae40167cba3be0a2034a4c88e6b",
+      "contract": "0xCCCcCC0000000000000000000000000000000005"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "note": "The plaintext of this asset is published here too — it is a public brand pack. The point of the run is that the KEY is gated, not that these particular bytes are secret. The hash below is what the unlock is checked against.",
+  "plaintextSha256": "46cab4a8232e4eea226500b424416a353618c8606008d374dbb15f56bc864cd7",
+  "ciphertextBytes": 832,
+  "cipher": "aes-256-gcm",
+  "layout": "12-byte IV || ciphertext || 16-byte tag"
+}

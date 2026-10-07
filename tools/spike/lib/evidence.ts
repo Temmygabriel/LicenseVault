@@ -19,6 +19,8 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { AENEID_FAUCET_URL } from "../../../lib/protocol/constants";
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 /** Repository root, derived from this file's location so the harness works from any cwd. */
 export const REPO_ROOT = join(HERE, "..", "..", "..");
@@ -122,7 +124,7 @@ export function requirePrivateKey(envVar: string): `0x${string}` {
     throw new PreconditionError(
       `${envVar} is not set. This step submits a real transaction on Story Aeneid and needs a ` +
         `funded disposable testnet wallet. Copy .env.example to .env.local, set ${envVar}, and ` +
-        `fund the address from https://faucet.quicknode.com/story. ` +
+        `fund the address from ${AENEID_FAUCET_URL}. ` +
         `NEVER use a wallet that holds mainnet funds.`,
     );
   }

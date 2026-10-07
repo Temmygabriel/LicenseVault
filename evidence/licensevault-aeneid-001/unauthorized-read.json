@@ -1,0 +1,20 @@
+{
+  "observedAt": "2026-10-07T17:16:38.746Z",
+  "outcome": "REFUSED",
+  "reader": "0x226e01730F6991C1BD11f58d1204638bee89A863",
+  "readerIsOwner": false,
+  "licenseTokensHeld": 0,
+  "accessAuxData": "0x",
+  "request": {
+    "operation": "CDR read()",
+    "uuid": 11062,
+    "contract": "0xCCCcCC0000000000000000000000000000000005",
+    "condition": "0xC0640AD4CF2CaA9914C8e5C44234359a9102f7a3"
+  },
+  "observedError": {
+    "name": "TransactionExecutionError",
+    "message": "Execution reverted for an unknown reason.\n\nRequest Arguments:\n  from:   0x226e01730F6991C1BD11f58d1204638bee89A863\n  to:     0xcccccc0000000000000000000000000000000005\n  value:  0 ETH\n  data:   0xb98a6c1a0000000000000000000000000000000000000000000000000000000000002b360000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041041e991a585935957e16a808d17249a4097530835a53e776d76bd8516e12c81dce90d482914b068362063cf110c79f3a49190d16f981cccb5830bd91a2a915415400000000000000000000000000000000000000000000000000000000000000\n\nDetails: execution reverted\nVersion: viem@2.57.3"
+  },
+  "authorizationShaped": true,
+  "note": "No transaction hash is recorded here: the read was rejected by the condition contract, so there is no successful on-chain operation to point at. The refusal is evidenced by the error the node returned and by the gate probes in gate-probes.json."
+}

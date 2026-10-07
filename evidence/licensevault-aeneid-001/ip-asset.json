@@ -1,0 +1,29 @@
+{
+  "observedAt": "2026-10-07T17:14:25.633Z",
+  "chainId": 1315,
+  "name": "Commercial Brand Asset Pack",
+  "spgNftContract": "0x52bA3120c58056D0c9be496950C3864E056b0B7a",
+  "ipId": "0x6C6046f021093c54F43663Fad93037E6556Bfdd8",
+  "nftTokenId": "1",
+  "licenseTermsId": "2183",
+  "licenseFlavor": "commercialUse",
+  "defaultMintingFee": "0",
+  "currency": "0x1514000000000000000000000000000000000000",
+  "royaltyPolicy": "0xBe54FB168b3c982b7AaE60dB6CF75Bd8447b390E",
+  "commercialRevShare": 0,
+  "operator": "0x75D900D18866D8aA416CCEFD9e85D2C61dB0aCa9",
+  "transactions": [
+    {
+      "operation": "create SPG NFT collection",
+      "txHash": "0x914a14602d5785f7228c8a9ca7cedaab433c787b31c6c601398a155bcd9040dc",
+      "explorerUrl": "https://aeneid.datanetscan.io/tx/0x914a14602d5785f7228c8a9ca7cedaab433c787b31c6c601398a155bcd9040dc",
+      "contract": "0x52bA3120c58056D0c9be496950C3864E056b0B7a"
+    },
+    {
+      "operation": "mint NFT and register IP asset with PIL Commercial Use terms",
+      "txHash": "0x574454f964858b4c918a255ff854ed0d36c153da64baacfdbc8722eb8d17d800",
+      "explorerUrl": "https://aeneid.datanetscan.io/tx/0x574454f964858b4c918a255ff854ed0d36c153da64baacfdbc8722eb8d17d800",
+      "contract": "Story IPAssetRegistry via LicenseAttachmentWorkflows"
+    }
+  ]
+}

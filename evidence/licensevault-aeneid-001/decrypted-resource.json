@@ -1,0 +1,12 @@
+{
+  "observedAt": "2026-10-07T17:22:28.900Z",
+  "outcome": "UNLOCKED",
+  "asset": "Commercial Brand Asset Pack",
+  "cipher": "aes-256-gcm",
+  "plaintextBytes": 804,
+  "plaintextSha256": "46cab4a8232e4eea226500b424416a353618c8606008d374dbb15f56bc864cd7",
+  "plaintextSha256BeforeRun": "46cab4a8232e4eea226500b424416a353618c8606008d374dbb15f56bc864cd7",
+  "matches": true,
+  "dataKeySha256": "4a6da4fdb2a559caab71495c47399880265d254504ec1d99b6459fc8b99e8d01",
+  "note": "The plaintext is not recorded here because it is reproducible from the sealed blob and the key. The hash is the evidence: it was computed before any unlock was claimed and compared after."
+}

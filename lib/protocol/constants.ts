@@ -70,6 +70,44 @@ export const AENEID_LICENSE_TOKEN_NAME = "Programmable IP License Token" as cons
 export const AENEID_LICENSE_TOKEN_SYMBOL = "PILicenseToken" as const;
 
 /**
+ * Wrapped IP (WIP) on Aeneid — the currency token named in our PIL terms.
+ *
+ * VERIFIED 2026-10-07, and it had to be. `PILFlavor.commercialUse` **refuses a zero
+ * royaltyPolicy**, and the protocol refuses a royalty policy with a zero currency
+ * ("Royalty policy requires currency token"). So a free commercial-use license cannot be
+ * built by zeroing both — the currency and the policy must be real, whitelisted addresses
+ * even when the minting fee is 0.
+ *
+ * Live checks: 3210 bytes of code at this address, `name()` = "Wrapped IP",
+ * `symbol()` = "WIP", `decimals()` = 18, and `RoyaltyModule.isWhitelistedRoyaltyToken()`
+ * returns true. The currency whitelist the SDK enforces for chain 1315 is exactly
+ * {WIP, MERC20}; WIP is the natural choice because it is the wrapped native token.
+ *
+ * Note the vanity address: it encodes chain 1514 (mainnet) but is the live WIP on 1315 too.
+ */
+export const AENEID_WIP_TOKEN_ADDRESS =
+  "0x1514000000000000000000000000000000000000" as const;
+
+/**
+ * RoyaltyPolicyLAP (Liquid Absolute Percentage) on Aeneid — the policy our PIL terms name.
+ *
+ * VERIFIED 2026-10-07. Live checks: bytecode present (176 bytes — an EIP-1967 proxy, so
+ * identity was confirmed by behaviour, not size), and
+ * `RoyaltyModule.isWhitelistedRoyaltyPolicy()` returns true. The protocol rejects a
+ * non-whitelisted policy outright, so this is the check that matters.
+ *
+ * LAP is the standard policy for commercial use; RoyaltyPolicyLRP
+ * (`0x9156e603C949481883B1d3355c6f1132D191fC41`) is also whitelisted and is the
+ * derivative-remix policy. We use LAP because our license is a plain commercial use.
+ *
+ * Our terms set `commercialRevShare: 0` and `defaultMintingFee: 0`, so naming a royalty
+ * policy costs nothing and imposes no payment — the license stays free. The policy is
+ * required by the protocol's shape, not by our economics.
+ */
+export const AENEID_ROYALTY_POLICY_LAP_ADDRESS =
+  "0xBe54FB168b3c982b7AaE60dB6CF75Bd8447b390E" as const;
+
+/**
  * Hard cap the CDR contract enforces on a vault's encrypted payload: 1024 bytes.
  * Verified live via `maxEncryptedDataSize()`.
  *
@@ -124,14 +162,41 @@ export const CDR_API_URL_AENEID = "http://172.192.41.96:1317" as const;
 /**
  * Aeneid testnet faucet.
  *
- * VERIFIED 2026-10-05: HTTP 200, and the page itself declares "Story Aeneid" and
- * chain ID 1315, with the meta description "Claim your IP testnet tokens for free —
- * one drip per network every 12 hours."
+ * CORRECTED 2026-10-07. The faucet recorded here previously was
+ * `https://faucet.quicknode.com/story` (VERIFIED reachable 2026-10-05, but its amount was
+ * never verified). A user attempting to fund the project's wallets found that route **gated
+ * on holding ETH on mainnet**, which is useless to anyone starting from nothing — so the
+ * previously-recorded route was not actually usable, only reachable.
  *
- * Documented only. This project never automates a claim and never asks for a seed
- * phrase; a human funds a disposable testnet wallet.
+ * The first-party docs now name a different faucet:
+ * `https://aeneid.faucet.datafdn.org/`, listed with an amount of **10 IP**.
+ * Source: https://docs.datafdn.org/network/connect/aeneid.md (fetched 2026-10-07).
+ *
+ * The host is `datafdn.org`, not `story.foundation` — the same rebrand recorded in
+ * docs/PROTOCOL_DISCOVERY.md. Note the distinction we keep having to make: the docs page is
+ * authoritative and machine-readable, but the faucet itself sits behind a Cloudflare bot
+ * challenge, so its *contents* remain UNVERIFIED from here. The URL and the 10 IP figure are
+ * documented; neither was observed by us directly.
+ *
+ * Documented only. This project never automates a claim and never asks for a seed phrase; a
+ * human funds a disposable testnet wallet.
  */
-export const AENEID_FAUCET_URL = "https://faucet.quicknode.com/story" as const;
+export const AENEID_FAUCET_URL = "https://aeneid.faucet.datafdn.org/" as const;
+
+/**
+ * Fallback faucet routes, recorded because funding is the project's single blocking
+ * dependency and one route failing should not stall the build.
+ *
+ * - `story.foundation` — the same official faucet on the pre-rebrand host. Resolves and is
+ *   Cloudflare-challenged (HTTP 403 "Just a moment..."), i.e. live but unreadable by machine.
+ * - Google Cloud Web3 — serves a `story/aeneid` path and asks for a Google sign-in rather
+ *   than a mainnet balance, but the page is a JS app whose static HTML does not enumerate the
+ *   networks it supports. **UNVERIFIED** that it lists Aeneid; worth trying, not to be relied on.
+ */
+export const AENEID_FAUCET_ALTERNATES = [
+  "https://aeneid.faucet.story.foundation/",
+  "https://cloud.google.com/application/web3/faucet/story/aeneid",
+] as const;
 
 /** The condition interface version this adapter encodes for. */
 export const CONDITION_INTERFACE = {

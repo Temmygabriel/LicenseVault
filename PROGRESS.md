@@ -1,11 +1,126 @@
 # LICENSEVAULT — LIVE BUILD PROGRESS
 
 > **This file is the running state of the project. It is updated at every phase boundary.**
-> Last updated: 2026-10-05 (BUILD 2 steps 2–7 harness written and locally green — 58 tests; still blocked on a funded wallet)
+> Last updated: 2026-10-07 — **BUILD 2 IS DONE. The full lock/unlock path ran end to end on live
+> Aeneid and passed every check.** 66 tests. Two protocol findings corrected (details below).
 
 **Repo:** https://github.com/Temmygabriel/LicenseVault
 **Local:** `C:\Users\USER\Documents\HACKATHONS BUILDS\BLI_LEGALTECH_HACK\LICENSEVAULT`
 **Contracts read:** `LICENSEVAULT_BUILD_SPEC.md` (2005 lines) + `LICENSEVAULT_DEEPSEEK_MASTER_PROMPT.md` (1620 lines)
+
+---
+
+---
+
+## 🟢 BUILD 2 — EXECUTED END TO END ON LIVE AENEID (2026-10-07)
+
+**The spike is no longer "written". It ran, on the real chain, and every check passed.**
+
+```
+ALL CHECKS PASSED
+  The mechanism is demonstrated end to end:
+    a real license gate refused a real read, a real license changed the
+    answer, and the recovered key opened the real content.
+```
+
+The two wallets were funded from the faucet (each `0x0` → exactly `1 IP`, so the balance is
+provably the drip and nothing else). Run `licensevault-aeneid-001`, chain 1315.
+
+| Step | What happened | Evidence |
+|---|---|---|
+| 1 environment | chain 1315, both wallets 1 IP, DKG round 45, threshold 3-of-5 | `environment.json` |
+| 2 asset | IP asset `0x6C6046f0…fdd8`, PIL **Commercial Use**, terms id **2183**, minting fee 0 | `ip-asset.json` |
+| 3 vault | CDR vault **uuid 11062** allocated and written, gated on LicenseReadCondition | `vault.json` |
+| 4 gate (free probes) | 4/4 — see the probe table below | `gate-probes.json` |
+| 5 denied (pre-mint) | reader with no licence gets no data key | `unauthorized-read.json` |
+| 6 mint | licence token **73227** minted **to the reader** | `license-token.json` |
+| 6b denied-licensed | **the attributable denial** — a wallet holding no licence, presenting the *real* token id, is refused | `denied-licensed.json` |
+| 7 read | licensed reader receives the 32-byte data key. Read tx `0xaaec7f41…cdea9` | `authorized-read.json` |
+| 8 unlock | key decrypts the content **byte for byte**; manifest reads "Commercial Brand Asset Pack"; key hash matches the read; data key destroyed | `decrypted-resource.json` |
+
+**Every transaction hash was re-verified against the chain after the run** — each returns
+`status 0x1` from `eth_getTransactionReceipt`, and each `to` is the contract it claims to be:
+
+| Tx | Block | `to` | Meaning |
+|---|---|---|---|
+| `0x914a1460…40dc` | 24623222 | `0xbe39E1C7…` registrationWorkflows | created the SPG NFT collection |
+| `0xf66ca349…96d3` | 24623301 | `0x04fbd8a2…` licensingModule | minted licence token 73227 |
+| `0xaaec7f41…cdea9` | 24623473 | `0xCCCcCC…05` the CDR contract | the authorised read |
+
+This is the check the build contract demands before any Explorer link is shown: the links in
+`ip-asset.json` / `license-token.json` / `authorized-read.json` point at transactions that
+exist. Had any hash come back `NOT FOUND`, no link would have been published.
+
+### The ordering argument, now demonstrated rather than asserted
+
+`denied-licensed` is the step that actually proves the product's claim. Everything about the
+request is valid — well-formed auxiliary data naming licence token **73227**, which really
+exists — and the only thing wrong is that **the caller does not own it**. The condition
+contract evaluates authorization and returns `false`; the real read path honours that and
+refuses. That is the gate being bound to the caller's licence, end to end, in one run.
+
+The pre-mint denial alone could **not** have shown this, and the first draft of the harness
+wrongly implied it did. See finding 2.
+
+### Two protocol findings — both were the harness being wrong, not the chain
+
+**Finding 1 — `PILFlavor.commercialUse` refuses a zero `royaltyPolicy`.**
+
+The first funded run died at step 2 with *"Royalty policy is required when commercial use is
+enabled."* The note previously in this project said the opposite — that a free licence should
+zero both `currency` and `royaltyPolicy`. That was wrong, and it cost a run. The SDK's
+`validateLicenseTerms` requires a **non-zero** policy whenever `commercialUse` is true, and the
+protocol then requires a non-zero currency to go with it (*"Royalty policy requires currency
+token"*). A free licence still has to name both.
+
+Resolved by reading the SDK, then **verifying against the live chain** rather than trusting the
+addresses it ships:
+- `wrappedIp[1315]` = `0x15140000…0000` → live `name()` "Wrapped IP", `symbol()` "WIP",
+  `decimals()` 18, and `isWhitelistedRoyaltyToken()` **true**
+- `royaltyPolicyLap[1315]` = `0xBe54FB16…390E` → bytecode present, and
+  `isWhitelistedRoyaltyPolicy()` **true**
+
+Both are now pinned in `lib/protocol/constants.ts` with the evidence in the doc comment.
+
+**Finding 2 — a "no" from the read condition is not always `false`; sometimes it is a revert.**
+
+This one matters more, because it was a **fake-success risk in our own harness.**
+
+The first funded run "passed" its denial step by matching the error message against
+`/revert|license|denied/i` — which any revert satisfies. But the denial was being attempted
+with **empty** auxiliary data, and the condition contract reverts on that *before it evaluates
+authorization at all*. A wallet that held a valid licence and sent empty aux data would have
+been refused identically. So the step proved the read was refused, and nothing whatsoever about
+licensing. Four checks failed; three of the four were the harness's expectations being wrong.
+
+Measured behaviour of `checkReadCondition` on live Aeneid:
+
+| Request | Result | Attributable to licensing? |
+|---|---|---|
+| empty aux data | **reverts**, no decodable reason (`abi.decode` fails first) | ❌ no — it is the *request* that is bad |
+| names a token id never minted | **reverts** `ERC721NonexistentToken(uint256)` = `0x7e273289` — the condition calls `ownerOf()` and OpenZeppelin's ERC-721 reverts | ❌ no — the token does not exist |
+| names a **real** token id, caller is **not** its owner | returns **`false`** | ✅ **yes** — the only clean denial shape |
+| names a real token id, caller **is** the owner | returns **`true`** | ✅ yes |
+
+The fix was not to loosen the assertion. It was to make the harness distinguish a *decodable
+verdict* from an *opaque failure*, to label each probe with `provesLicensing`, and to add step
+6b so the attributable denial is actually performed rather than assumed. `unauthorized-read.json`
+now carries `provesLicensing: false` and a `limitation` field saying so in plain words.
+
+**This is a product-relevant fact, not just a harness detail:** an integrator who maps "the read
+failed" to `NO_LICENSE` will mislabel a malformed request as a licensing decision. The read path
+must decode what it got.
+
+### Cost
+
+The whole run cost roughly **0.00006 IP** across both wallets, against a 1 IP drip. Protocol
+fees (`allocateFee`, `writeFee`, `readFee`) are **0** right now — measured live, never assumed.
+
+### One honest loose end
+
+The very first failed run created an SPG NFT collection at `0x6AA566C2…F2FD` (tx
+`0x6b6b86f8…e04`) before dying on finding 1. That collection is a real, orphaned on-chain
+object — nothing references it. It is recorded here rather than quietly dropped.
 
 ---
 
@@ -31,16 +146,19 @@ fixed and covered, not merely passed over.
 
 ---
 
-## LOCAL GATE — measured 2026-10-05 21:40
+## LOCAL GATE — re-measured 2026-10-07 (after the funded run)
 
 | Check | Command | Result |
 |---|---|---|
 | Lint | `npm run lint` | ✅ clean (0 errors, 0 warnings) |
 | Typecheck | `npm run typecheck` | ✅ clean |
-| Tests | `npm test` | ✅ **58 passed / 58** (4 files) |
-| Network check | `npm run spike:check` | ✅ **12/12 PASS** against live Aeneid |
-| Spike harness guards | `npm run spike:vault` | ✅ reached live Aeneid, stopped cleanly at the funding precondition (exit 1, no crash) |
+| Tests | `npm test` | ✅ **66 passed / 66** (4 files) |
+| Network check | `npm run spike:check` | ✅ 12/12 PASS against live Aeneid |
+| **BUILD 2 spike** | `npm run spike:vault` | ✅ **ALL CHECKS PASSED** — full lock/unlock on live Aeneid |
 | Lockfile sync | `npm ci --dry-run` | ✅ 408 packages, no mismatch |
+
+Previous measurement (2026-10-05, pre-funding) was 58 tests; the count rose to 66 with the
+faucet-correction tests and the PIL-address pins.
 
 CI re-runs the same gate plus `next build`; its result is authoritative because the local
 machine is 8 GB and the build step is deliberately not run here.
@@ -54,8 +172,8 @@ machine is 8 GB and the build step is deliberately not run here.
 |---|---|---|
 | BUILD 0 | Repo + environment | ✅ PASS — CI green (run `37311937901`) |
 | BUILD 1 | Protocol discovery | ✅ PASS — all core facts verified |
-| BUILD 2 | Minimal protocol spike | ⏳ **step 1 DONE (12/12)**; steps 2–8 harness written and locally green — execution blocked on funded wallets |
-| BUILD 3 | Evidence + verifier | ⬜ NOT STARTED (the spike already writes partial evidence) |
+| BUILD 2 | Minimal protocol spike | ✅ **PASS — executed end to end on live Aeneid 2026-10-07; ALL CHECKS PASSED** |
+| BUILD 3 | Evidence + verifier | ⬜ NOT STARTED (the spike already writes the evidence; the independent verifier does not exist) |
 | BUILD 4 | Protocol adapter | ⬜ NOT STARTED |
 | BUILD 5 | Product UI (four surfaces) | ⬜ NOT STARTED |
 | BUILD 6 | Visual system | ⬜ NOT STARTED |
@@ -99,13 +217,13 @@ reachability); none of them is required for BUILD 2.
 cdr-sdk `main` but absent from the published 0.2.2 package. Recorded and resolved in
 `docs/PROTOCOL_DECISION.md` rather than silently worked around.
 
-### Test suite — what it actually proves (58 tests, 4 files)
+### Test suite — what it actually proves (66 tests, 4 files)
 
 | File | Tests | Proves |
 |---|---|---|
 | `tests/conditions.test.ts` | 13 | ABI encoding matches the documented condition formats byte-for-byte; malformed addresses, bad EIP-55 checksums, empty token lists and negative ids are all **refused** rather than encoded |
 | `tests/state.test.ts` | 18 | The access state machine cannot be talked into `UNLOCKED`; only an authorization refusal reaches `NO_LICENSE`; timeouts and unknown errors never do |
-| `tests/constants.test.ts` | 18 | Every protocol address is a valid EIP-55 address; the docs' invalid CDR checksum is pinned; the live-read license token metadata and the 1024-byte vault cap are recorded as assertions, not comments |
+| `tests/constants.test.ts` | 26 | Every protocol address is a valid EIP-55 address; the docs' invalid CDR checksum is pinned; the live-read license token metadata and the 1024-byte vault cap are recorded as assertions, not comments; **the PIL royalty policy and currency can never be re-zeroed**, and the faucet can never silently revert to the mainnet-gated QuickNode route |
 | `tests/content.test.ts` | 9 | Protected content round-trips byte for byte, and a **wrong key, a tampered ciphertext, or a truncated blob all THROW** rather than returning bytes |
 
 Three properties are worth calling out because they are structural, not stylistic:
@@ -182,22 +300,25 @@ Two guessed getter names were rejected and recorded as reverts rather than worke
 | Step | Status |
 |---|---|
 | 1. Verify network + deployment (no wallet) | ✅ **DONE — 12/12 PASS** (`npm run spike:check`) |
-| 2. Allocate a vault | ✅ **HARNESS WRITTEN** — ready, needs funded wallets |
-| 3. Write encrypted data key | ✅ **HARNESS WRITTEN** — ready, needs funded wallets |
-| 4. Ask the gate directly (free `eth_call` probes) | ✅ **HARNESS WRITTEN** — ready, needs funded wallets |
-| 5. Prove unauthorized read is rejected | ✅ **HARNESS WRITTEN** — ready, needs funded wallets |
-| 6. Mint a license token | ✅ **HARNESS WRITTEN** — ready, needs funded wallets |
-| 7. Prove authorized read succeeds | ✅ **HARNESS WRITTEN** — ready, needs funded wallets |
-| 8. Recover plaintext + save evidence | ✅ **HARNESS WRITTEN** — ready, needs funded wallets |
+| 2. Allocate a vault | ✅ **EXECUTED** — uuid 11062, chain 1315 |
+| 3. Write encrypted data key | ✅ **EXECUTED** — 2 transactions |
+| 4. Ask the gate directly (free `eth_call` probes) | ✅ **EXECUTED — 4/4**, and the probe set was corrected after the chain contradicted it |
+| 5. Prove unauthorized read is rejected | ✅ **EXECUTED** — and re-labelled, because as first written it overclaimed |
+| 6. Mint a license token | ✅ **EXECUTED** — token 73227, to the reader |
+| 6b. Attributable denial (added 2026-10-07) | ✅ **EXECUTED** — the step that actually proves the claim |
+| 7. Prove authorized read succeeds | ✅ **EXECUTED** — read tx `0xaaec7f41…cdea9` |
+| 8. Recover plaintext + save evidence | ✅ **EXECUTED** — plaintext sha256 matches byte for byte |
 
-Steps 2–8 are implemented in `tools/spike/build-vault.ts` (`npm run spike:vault`). **None of them
-has been executed against the network yet** — nothing here should be described as working. What
-is proven about the harness today is: it typechecks, it lints, its non-network logic is unit
-tested, and its guards fire correctly (verified by running it: it reached live Aeneid, read chain
-1315, and stopped cleanly at the funding precondition).
+**Everything in this table has now happened on the live chain**, and every transaction hash was
+re-verified with `eth_getTransactionReceipt` after the fact. See the "BUILD 2 — EXECUTED" section
+at the top of this file for the full record.
 
-**Test count: 46 → 49 → 58.** Lint clean, typecheck clean, `check-network` 12/12, all guards
-verified by execution.
+**Test count: 46 → 49 → 58 → 66.** Lint clean, typecheck clean, `check-network` 12/12,
+`spike:vault` **ALL CHECKS PASSED**.
+
+Step 6b did not exist in the original plan. It was added because the first funded run exposed
+that step 5, as written, could not prove what it claimed — the detail is worth reading, because
+it is the one place in this project where the harness itself was the thing that lied.
 
 ### What the BUILD 2 harness does, and how it refuses to lie
 
@@ -484,20 +605,33 @@ and avoids depending on unreleased `main`-branch code.
 2. ~~Write `docs/PROTOCOL_DISCOVERY.md` + `docs/PROTOCOL_DECISION.md`~~ ✅
 3. ~~Add GitHub Actions CI (install → lint → typecheck → test → build)~~ ✅
 4. ~~Add `docs/CLAIM_STATUS.md`, `docs/SECURITY.md`, `docs/COST_MATRIX.md`~~ ✅ — plus `ARCHITECTURE.md`, `LIMITATIONS.md`, `EVIDENCE.md`, `ASSET_PROVENANCE.md`, `UX_TEST.md`
-5. **Commit + push this batch, then confirm the CI run is green.**
-6. **BUILD 2** — smallest real protected vault on Aeneid (CLI harness, no UI):
-   `tools/spike/check-network.ts` is written and is step 1 (network + deployment check,
-   no wallet, no transaction). Step 2 onwards needs a **funded disposable testnet wallet** —
-   a user action, and the faucet route is currently `UNVERIFIED`.
-7. **BUILD 5** — `tools/verify-canonical-run.ts` (already referenced by `npm run verify:run`).
+5. ~~Commit + push this batch, then confirm the CI run is green.~~ ✅
+6. ~~**BUILD 2** — smallest real protected vault on Aeneid (CLI harness, no UI)~~ ✅ **DONE
+   2026-10-07** — executed end to end, all checks passed, every tx hash re-verified on chain.
+7. **BUILD 3 — the independent verifier**, `tools/verify-canonical-run.ts` (already referenced
+   by `npm run verify:run`, **still not written**). It must re-derive the evidence's claims from
+   the chain rather than trusting the JSON the harness wrote — otherwise the evidence proves
+   only that the harness agrees with itself. This is the natural next step: the artifacts now
+   exist for it to check, including a deliberately self-limiting `unauthorized-read.json`.
+8. **BUILD 4 — protocol adapter**, lifting `tools/spike/*` into `lib/protocol/*` so the UI and
+   the harness share one implementation. The known product-relevant fact to carry across:
+   a read failure must be *decoded* before it is labelled, because a malformed request and a
+   missing licence are not the same refusal (finding 2).
+9. **BUILD 8 — Vercel.** User has offered to issue a token so deployment can be driven the same
+   way GitHub is. Not needed until the UI exists; raise it when BUILD 5 lands.
 
 ---
 
 ## WHAT IS *NOT* BUILT YET (stated plainly, so it is never mistaken for done)
 
-- No vault has been allocated. No license has been minted. **No read has been attempted** —
-  neither a rejected one nor an allowed one. The core mechanism is designed and unit-tested
-  but **has not been demonstrated end to end.**
+- ~~No vault has been allocated. No license has been minted. **No read has been attempted**~~ —
+  **all three have now happened on live Aeneid** (run `licensevault-aeneid-001`): vault uuid
+  11062, licence token 73227, an authorized read that returned a key, a refused read from an
+  unlicensed wallet, and content decrypted byte for byte. The mechanism **is** demonstrated end
+  to end at the protocol level.
+- What is still not built: **the verifier** that independently re-checks that evidence
+  (BUILD 3), the shared adapter (BUILD 4), and **every user-facing surface** (BUILD 5+). The
+  demonstration above is a CLI harness writing JSON — a judge cannot click it yet.
 - The interface (`app/page.tsx`) is a single deliberate non-final surface: it renders the
   Access Docket in `RESTRICTED` with a **disabled** "Check Access" button. It does not
   pretend to verify anything.
@@ -510,29 +644,33 @@ and avoids depending on unreleased `main`-branch code.
 
 ## BLOCKERS
 
-**One blocker, and it is now a single human action — nothing else is waiting.**
+**None. BUILD 2 is unblocked and complete.**
 
-| Item | Needs | Impact | Route |
-|---|---|---|---|
-| BUILD 2 steps 2–8 execution | Two disposable Aeneid wallets funded with IP (gas) | Blocks every on-chain step: allocate, write, deny, mint, read, decrypt | **VERIFIED faucet**: `https://faucet.quicknode.com/story`. Amount per drip UNVERIFIED — a human claims it |
-
-The wallets already exist and their keys are already in place, so funding is the only remaining
-step:
+The wallets were funded on 2026-10-07 and the run executed. Both went from `0x0` to exactly
+`1 IP`, so the balance is provably the faucet drip:
 
 | Wallet | Address | Purpose | Balance |
 |---|---|---|---|
-| owner | `0x75D900D18866D8aA416CCEFD9e85D2C61dB0aCa9` | creates the IP asset + terms, allocates and writes the vault, mints the license | `0x0` |
-| reader | `0x226e01730F6991C1BD11f58d1204638bee89A863` | the wallet refused a read *before* the mint and allowed *after* it | `0x0` |
+| owner | `0x75D900D18866D8aA416CCEFD9e85D2C61dB0aCa9` | creates the IP asset + terms, allocates and writes the vault, mints the license | 1 IP (≈0.99994 after gas) |
+| reader | `0x226e01730F6991C1BD11f58d1204638bee89A863` | the wallet refused a read *before* the mint and allowed *after* it | 1 IP |
 
-Once funded, the run is one command locally (`npm run spike:vault`) or one manual dispatch of
-`.github/workflows/spike.yml`, which does the work on a GitHub runner instead of the 8 GB dev
-machine.
+**Funding route — CORRECTED 2026-10-07.** The previously-recorded
+`https://faucet.quicknode.com/story` returns HTTP 200 but is **gated on holding ETH on
+mainnet**, which makes it unusable from a standing start — reachable is not the same as
+workable. The route the first-party docs name, and the one that actually worked, is:
 
-Two smaller dependencies, neither blocking BUILD 2:
+> **`https://aeneid.faucet.datafdn.org/`** — documented amount **10 IP**
+> (source: `https://docs.datafdn.org/network/connect/aeneid.md`)
 
-- The faucet's **drip amount is UNVERIFIED** — if one drip does not cover ~6 transactions per
-  wallet, the run needs a second drip after the 12-hour cooldown. The harness resumes rather
-  than repeating on-chain work, so a partial run is not wasted.
+`AENEID_FAUCET_URL` has been corrected and pinned by a test. Two fallbacks are recorded in
+`AENEID_FAUCET_ALTERNATES` because funding is the project's single hardest dependency.
+Honest caveat: the faucet sits behind a Cloudflare bot challenge, so its contents were never
+observed by us directly — the URL and the 10 IP figure come from the docs page.
+
+Remaining dependencies, none of them blocking:
+
+- **BUILD 3+ has not started.** The spike writes evidence, but the verifier that re-checks it
+  independently (`npm run verify:run`) does not exist yet.
 - The Story-API endpoint risk (§7) is confirmed open but characterised: **availability, not
   confidentiality**. It does not block BUILD 2–8 and must be resolved before BUILD 9.
 

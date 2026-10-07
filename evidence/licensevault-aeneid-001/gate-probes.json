@@ -1,0 +1,51 @@
+{
+  "observedAt": "2026-10-07T17:22:07.457Z",
+  "chainId": 1315,
+  "uuid": 11062,
+  "condition": "0xC0640AD4CF2CaA9914C8e5C44234359a9102f7a3",
+  "phase": "after-mint",
+  "note": "These are eth_call results, not transactions: no value moved and no state changed. They exist so the denial in step 5 can be attributed to the condition contract's own verdict rather than inferred from an error message.",
+  "readerIsOwner": false,
+  "probes": [
+    {
+      "label": "empty aux data → reverts before authorization",
+      "caller": "0x226e01730F6991C1BD11f58d1204638bee89A863",
+      "accessAuxData": "0x",
+      "expected": "revert with no decodable reason",
+      "observed": "reverted (no decodable reason)",
+      "provesLicensing": false,
+      "matched": true,
+      "error": "The contract function \"checkReadCondition\" reverted.\n\nContract Call:\n  address:   0xC0640AD4CF2CaA9914C8e5C44234359a9102f7a3\n  function:  checkReadCondition(uint32 uuid, bytes accessAuxData, bytes conditionData, address caller)\n  args:                        (11062, 0x, 0x000000000000000000000000fe3838bfb30b34170f00030b52ea4893d8aac6bc0000000000000000000000006c6046f021093c54f43663fad93037e6556bfdd8, 0x226e01730F6991C1BD11f58d1204638bee89A863)\n\nDocs: https://viem.sh/docs/contract/readContract\nDetails: execution reverted\nVersion: viem@2.57.3"
+    },
+    {
+      "label": "claims a licence token id that was never minted → reverts",
+      "caller": "0x226e01730F6991C1BD11f58d1204638bee89A863",
+      "accessAuxData": "0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000003b9ac9ff",
+      "expected": "revert ERC721NonexistentToken(uint256)",
+      "observed": "reverted ERC721NonexistentToken(uint256)",
+      "provesLicensing": false,
+      "matched": true,
+      "error": "The contract function \"checkReadCondition\" reverted with the following signature:\n0x7e273289\n\nUnable to decode signature \"0x7e273289\" as it was not found on the provided ABI.\nMake sure you are using the correct ABI and that the error exists on it.\nYou can look up the decoded signature here: https://4byte.sourcify.dev/?q=0x7e273289.\n \nContract Call:\n  address:   0xC0640AD4CF2CaA9914C8e5C44234359a9102f7a3\n  function:  checkReadCondition(uint32 uuid, bytes accessAuxData, bytes conditionData, address caller)\n  args:                        (11062, 0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000003b9ac9ff, 0x000000000000000000000000fe3838bfb30b34170f00030b52ea4893d8aac6bc0000000000000000000000006c6046f021093c54f43663fad93037e6556bfdd8, 0x226e01730F6991C1BD11f58d1204638bee89A863)\n\nDocs: https://viem.sh/docs/contract/decodeErrorResult\nDetails: execution reverted\nVersion: viem@2.57.3"
+    },
+    {
+      "label": "holder presents its real token id → allowed",
+      "caller": "0x226e01730F6991C1BD11f58d1204638bee89A863",
+      "accessAuxData": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000011e0b",
+      "expected": "true",
+      "observed": "true",
+      "provesLicensing": true,
+      "matched": true,
+      "error": null
+    },
+    {
+      "label": "NON-holder presents the same real token id → denied",
+      "caller": "0x75D900D18866D8aA416CCEFD9e85D2C61dB0aCa9",
+      "accessAuxData": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000011e0b",
+      "expected": "false",
+      "observed": "false",
+      "provesLicensing": true,
+      "matched": true,
+      "error": null
+    }
+  ]
+}

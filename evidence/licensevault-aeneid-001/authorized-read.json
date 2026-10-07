@@ -1,0 +1,18 @@
+{
+  "observedAt": "2026-10-07T17:22:28.892Z",
+  "outcome": "DATA_KEY_RECOVERED",
+  "reader": "0x226e01730F6991C1BD11f58d1204638bee89A863",
+  "licenseTokenId": "73227",
+  "accessAuxData": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000011e0b",
+  "dataKeyBytes": 32,
+  "dataKeySha256": "4a6da4fdb2a559caab71495c47399880265d254504ec1d99b6459fc8b99e8d01",
+  "note": "dataKeySha256 is a fingerprint for comparison between steps, not a way to recover the key. The key exists only in memory during the run and in the vault on chain.",
+  "transactions": [
+    {
+      "operation": "CDR read() as a license holder",
+      "txHash": "0xaaec7f41637e65d4f6c55ce66d45399e1798b16716c7f7cfb1aa654ee23cdea9",
+      "explorerUrl": "https://aeneid.datanetscan.io/tx/0xaaec7f41637e65d4f6c55ce66d45399e1798b16716c7f7cfb1aa654ee23cdea9",
+      "contract": "0xCCCcCC0000000000000000000000000000000005"
+    }
+  ]
+}

@@ -44,13 +44,13 @@ import {
   getAddress,
   hexToBytes,
   http,
-  zeroAddress,
   type Address,
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   CDRClient,
+  initWasm,
   type CDRPublicClient,
   type CDRWalletClient,
 } from "@piplabs/cdr-sdk";
@@ -63,6 +63,7 @@ import {
 } from "../../lib/protocol/conditions";
 import {
   AENEID_CHAIN_ID,
+  AENEID_FAUCET_URL,
   AENEID_LICENSE_TOKEN_ADDRESS,
   AENEID_RPC_URL,
   CANONICAL_RUN_ID,
@@ -73,6 +74,8 @@ import {
   OWNER_WRITE_CONDITION_ADDRESS,
   PROTECTED_ASSET_NAME,
   REQUIRED_LICENSE_LABEL,
+  AENEID_ROYALTY_POLICY_LAP_ADDRESS,
+  AENEID_WIP_TOKEN_ADDRESS,
   explorerTxUrl,
 } from "../../lib/protocol/constants";
 import {
@@ -105,6 +108,14 @@ const STEPS = [
   "gate",
   "denied",
   "mint",
+  // The pre-mint `denied` step cannot prove the refusal was ABOUT licensing: before the mint no
+  // licence token exists at all, so any request the reader makes is malformed or points at
+  // nothing, and the condition contract reverts before it evaluates authorization (see
+  // ProbeExpectation). `denied-licensed` is the same denial asked again once a real licence
+  // DOES exist — different wallet, real token id — which is the version that actually tests the
+  // rule. Keeping both, clearly labelled, is the point: one shows the read is refused, the other
+  // shows WHY.
+  "denied-licensed",
   "read",
   "unlock",
 ] as const;
@@ -190,7 +201,7 @@ async function assertFunded(address: Address, label: string): Promise<bigint> {
   if (balance === 0n) {
     fail(
       `${label} ${address} has 0 IP and cannot pay gas. Fund it at ` +
-        `https://faucet.quicknode.com/story, then re-run. ` +
+        `${AENEID_FAUCET_URL}, then re-run. ` +
         `Nothing has been submitted from this wallet yet.`,
     );
   }
@@ -388,8 +399,16 @@ async function stepAsset(state: RunState): Promise<RunState> {
   note("SPG NFT collection", `${spgNftContract} — tx ${collection.txHash ?? "unknown"}`);
 
   // 2. Mint an NFT and register it as an IP asset, with Commercial Use PIL terms attached.
-  //    `defaultMintingFee: 0` keeps the $0 core path intact: the license is free, the gate is
+  //    `defaultMintingFee: 0n` keeps the $0 core path intact: the license is free, the gate is
   //    what protects the asset — which is the claim this project is making.
+  //
+  //    The currency and royalty policy are NOT zero here, and that is deliberate. The SDK's
+  //    `PILFlavor.validateLicenseTerms` throws "Royalty policy is required when commercial use
+  //    is enabled" for a zero policy, and the protocol throws "Royalty policy requires currency
+  //    token" for a policy with a zero currency. A free license still has to name both. With
+  //    `commercialRevShare: 0` (the flavor's default) and a 0 minting fee, the license remains
+  //    free — the policy is a structural requirement, not a charge. Both addresses were
+  //    verified live and whitelisted before being pinned in lib/protocol/constants.ts.
   say("  … minting + registering the IP asset with PIL terms");
   const registered = await story.ipAsset.mintAndRegisterIpAssetWithPilTerms({
     spgNftContract,
@@ -397,8 +416,8 @@ async function stepAsset(state: RunState): Promise<RunState> {
       {
         terms: PILFlavor.commercialUse({
           defaultMintingFee: 0n,
-          currency: zeroAddress,
-          royaltyPolicy: zeroAddress,
+          currency: AENEID_WIP_TOKEN_ADDRESS,
+          royaltyPolicy: AENEID_ROYALTY_POLICY_LAP_ADDRESS,
         }),
       },
     ],
@@ -439,6 +458,11 @@ async function stepAsset(state: RunState): Promise<RunState> {
     licenseTermsId: licenseTermsId.toString(),
     licenseFlavor: "commercialUse",
     defaultMintingFee: "0",
+    // Recorded because a reader auditing the "free license" claim should see what the terms
+    // actually name. Both are required to be non-zero even at a 0 fee — see constants.ts.
+    currency: AENEID_WIP_TOKEN_ADDRESS,
+    royaltyPolicy: AENEID_ROYALTY_POLICY_LAP_ADDRESS,
+    commercialRevShare: 0,
     operator: state.wallets.owner,
     transactions: [
       {
@@ -634,14 +658,68 @@ async function stepVault(state: RunState): Promise<RunState> {
  *
  * A revert here is NOT read as "denied" — an unreadable gate is reported as a failure.
  */
+/**
+ * What we expect `checkReadCondition` to do, and — separately — what a refusal at that probe
+ * would actually PROVE.
+ *
+ * ---------------------------------------------------------------------------------------
+ * FINDING (2026-10-07, live Aeneid): this contract does not return `false` for every "no".
+ *
+ * The obvious mental model — "the gate returns true or false, false means denied" — is
+ * WRONG, and the first funded run is what exposed it:
+ *
+ *   • caller presents a licence token id that does NOT exist
+ *       → REVERTS with `ERC721NonexistentToken(uint256)` (selector 0x7e273289)
+ *         The condition calls `ownerOf(tokenId)` on the LicenseToken ERC-721, and OpenZeppelin's
+ *         ERC-721 reverts for a token that was never minted. It never gets to return a bool.
+ *   • caller presents EMPTY auxiliary data
+ *       → REVERTS with no data at all (`abi.decode` of empty bytes fails before any
+ *         authorization logic runs).
+ *   • caller presents a REAL token id and is NOT its owner
+ *       → returns `false`. This is the ONLY shape that is a clean, decodable "denied".
+ *
+ * So a refusal is only attributable to LICENSING when the contract actually reached its
+ * authorization logic and returned false. A revert may be about the *request*, not the
+ * *caller*. Conflating the two is precisely the fake-success this harness exists to prevent —
+ * and the first version of this file did conflate them, by treating any revert as a denial.
+ * ---------------------------------------------------------------------------------------
+ */
+type ProbeExpectation =
+  /** The contract evaluates authorization and returns this bool. */
+  | { kind: "returns"; value: boolean; provesLicensing: boolean }
+  /** The contract reverts with a specific, decodable custom error. */
+  | { kind: "reverts"; errorName: string; signature: Hex; provesLicensing: boolean }
+  /** The contract reverts with no decodable reason — a malformed request, not a verdict. */
+  | { kind: "revertsOpaque"; provesLicensing: false };
+
 interface GateProbe {
   label: string;
   caller: string;
   accessAuxData: string;
-  expected: boolean;
-  observed: boolean | null;
-  error: string | null;
+  expected: string;
+  observed: string;
+  /** Whether this probe's result is attributable to the caller's licence status. */
+  provesLicensing: boolean;
   matched: boolean;
+  error: string | null;
+}
+
+/** Known custom errors this condition contract can revert with. */
+const KNOWN_REVERTS: ReadonlyArray<{ signature: Hex; name: string; meaning: string }> = [
+  {
+    signature: "0x7e273289",
+    name: "ERC721NonexistentToken(uint256)",
+    meaning:
+      "the licence token id in accessAuxData was never minted, so `ownerOf` reverted — the " +
+      "contract never reached an authorization decision",
+  },
+];
+
+/** Read the 4-byte selector out of a viem error message, if the node supplied revert data. */
+function revertSelectorFromMessage(message: string): Hex | null {
+  const match = /0x[0-9a-fA-F]{8}\b/.exec(message);
+  if (match === null) return null;
+  return match[0] as Hex;
 }
 
 async function probeGate(
@@ -650,7 +728,7 @@ async function probeGate(
   label: string,
   caller: Address,
   accessAuxData: Hex,
-  expected: boolean,
+  expectation: ProbeExpectation,
 ): Promise<void> {
   const { ipId } = state.asset as NonNullable<RunState["asset"]>;
   const conditionData = encodeLicenseReadConditionData({
@@ -685,26 +763,59 @@ async function probeGate(
     error = caught instanceof Error ? caught.message : String(caught);
   }
 
-  const matched = error === null && observed === expected;
+  // Resolve what actually happened into something comparable to the expectation.
+  let observedText: string;
+  let matched: boolean;
+
+  if (error === null) {
+    observedText = String(observed);
+    matched = expectation.kind === "returns" && observed === expectation.value;
+  } else if (expectation.kind === "returns") {
+    observedText = `reverted (expected to return ${String(expectation.value)})`;
+    matched = false;
+  } else {
+    const selector = revertSelectorFromMessage(error);
+    const known = KNOWN_REVERTS.find((k) => k.signature === selector);
+    if (expectation.kind === "revertsOpaque") {
+      observedText = known === undefined ? "reverted (no decodable reason)" : `reverted ${known.name}`;
+      matched = known === undefined;
+    } else {
+      observedText = known === undefined ? `reverted (undecodable ${selector ?? "nothing"})` : `reverted ${known.name}`;
+      matched = selector === expectation.signature;
+    }
+  }
+
+  const expectedText =
+    expectation.kind === "returns"
+      ? String(expectation.value)
+      : expectation.kind === "revertsOpaque"
+        ? "revert with no decodable reason"
+        : `revert ${expectation.errorName}`;
 
   check(
     label,
     matched,
-    error !== null
-      ? `the gate could not be read: ${error}. An unreadable gate is not a denial — the ` +
-          `condition ABI may have changed, which the build contract requires us to stop on.`
-      : `checkReadCondition → ${observed} (expected ${expected}) for caller ${caller} with ` +
-          `accessAuxData ${accessAuxData === "0x" ? "empty" : accessAuxData}`,
+    matched
+      ? `checkReadCondition → ${observedText} (expected ${expectedText}) for caller ${caller}` +
+          (expectation.provesLicensing
+            ? " — this probe reaches the contract's authorization logic, so its verdict is attributable to the caller's licence"
+            : " — NOTE: this refusal is about the REQUEST, not the caller's licence, so it proves nothing about licensing")
+      : `checkReadCondition → ${observedText}, expected ${expectedText}. ${
+          error !== null
+            ? `Raw error: ${error.split("\n")[0]}`
+            : "The contract's observable behaviour has changed, which the build contract requires us to stop on."
+        }`,
   );
 
   collector.push({
     label,
     caller,
     accessAuxData,
-    expected,
-    observed,
-    error,
+    expected: expectedText,
+    observed: observedText,
+    provesLicensing: expectation.provesLicensing,
     matched,
+    error,
   });
 }
 
@@ -719,26 +830,49 @@ async function stepGate(state: RunState): Promise<RunState> {
   const owner = getAddress(state.wallets.owner);
   const probes: GateProbe[] = [];
 
-  await probeGate(state, probes, "no license, empty aux data → denied", reader, "0x", false);
+  // (a) Empty auxiliary data. The contract cannot even decode the request, so it reverts before
+  //     any authorization happens. Recorded because it documents a REAL trap for the product:
+  //     a UI that sends empty aux data gets a refusal that has nothing to do with licensing.
+  await probeGate(state, probes, "empty aux data → reverts before authorization", reader, "0x", {
+    kind: "revertsOpaque",
+    provesLicensing: false,
+  });
+
+  // (b) A well-formed request naming a licence token that does not exist. The condition calls
+  //     ownerOf() and the ERC-721 reverts. THIS is the shape an unlicensed party actually
+  //     produces, so the harness must expect a revert here, not `false`.
   await probeGate(
     state,
     probes,
-    "no license, claims an arbitrary token id → denied",
+    "claims a licence token id that was never minted → reverts",
     reader,
     encodeLicenseAccessAuxData([999_999_999n]),
-    false,
+    {
+      kind: "reverts",
+      errorName: "ERC721NonexistentToken(uint256)",
+      signature: "0x7e273289",
+      provesLicensing: false,
+    },
   );
 
   if (state.license !== undefined) {
     const realId = BigInt(state.license.licenseTokenId);
+
+    // (c) The holder, naming its own real token. The contract reaches its authorization logic
+    //     and says yes.
     await probeGate(
       state,
       probes,
       "holder presents its real token id → allowed",
       reader,
       encodeLicenseAccessAuxData([realId]),
-      true,
+      { kind: "returns", value: true, provesLicensing: true },
     );
+
+    // (d) THE DECISIVE PROBE. A different caller, presenting the SAME real, existing token id.
+    //     The contract evaluates authorization and returns false — because ownership of the
+    //     licence is what decides, not the presence of a valid-looking token id in the request.
+    //     This is the only probe here that proves the gate is bound to the caller's licence.
     if (!state.wallets.readerIsOwner) {
       await probeGate(
         state,
@@ -746,7 +880,7 @@ async function stepGate(state: RunState): Promise<RunState> {
         "NON-holder presents the same real token id → denied",
         owner,
         encodeLicenseAccessAuxData([realId]),
-        false,
+        { kind: "returns", value: false, provesLicensing: true },
       );
     }
   } else {
@@ -789,6 +923,18 @@ async function stepDenied(state: RunState): Promise<RunState> {
 
   if (state.vault === undefined) fail('run the "vault" step first.');
   if (state.license !== undefined) {
+    // Already demonstrated earlier in this run: the artifact is the record. Re-running must not
+    // be an error — a demo needs to be repeatable — but it must also not silently re-do a
+    // "denial" that is no longer a denial, because the reader now holds a licence.
+    const already = readArtifact(state.runId, "unauthorized-read.json");
+    if (already !== null) {
+      note(
+        "already demonstrated",
+        "unauthorized-read.json already records this refusal from before the mint. Not repeating " +
+          "it: the reader now holds a licence, so a second attempt would not be a denial at all.",
+      );
+      return state;
+    }
     fail(
       "a license has already been minted to the reader, so a denial can no longer be " +
         "demonstrated in this run. The denial must come first — that ordering is the proof.",
@@ -838,28 +984,33 @@ async function stepDenied(state: RunState): Promise<RunState> {
   }
 
   const message = observed?.message ?? "";
-  // Authorization-shaped failures are reverts from the condition check. Anything else —
-  // a timeout, an RPC error, an empty vault — is a different thing and must be surfaced.
-  const authorizationShaped =
-    /revert|condition|not authorized|unauthorized|denied|license/i.test(message) ||
-    /Revert|Contract/i.test(observed?.name ?? "");
   const infrastructureShaped =
     /timeout|fetch failed|ECONNREFUSED|ENOTFOUND|network|socket hang up/i.test(message);
-
-  check(
-    "reader without a license is refused",
-    authorizationShaped && !infrastructureShaped,
-    authorizationShaped && !infrastructureShaped
-      ? `accessCDR refused with ${observed?.name}: ${message}`
-      : `accessCDR failed, but NOT in an authorization-shaped way: ${observed?.name}: ${message}. ` +
-        `This must not be recorded as a successful denial.`,
+  // The read was refused. But WHAT refused it is the question, and this step cannot answer it.
+  const refused = !infrastructureShaped && /revert|Contract|condition|license|unauthorized|denied/i.test(
+    `${observed?.name ?? ""} ${message}`,
   );
 
+  check(
+    "reader without a license does not receive the data key",
+    refused,
+    refused
+      ? `accessCDR refused with ${observed?.name}. The refusal is real: no data key came back.`
+      : `accessCDR failed, but NOT as a refusal — this looks like infrastructure ` +
+        `(${observed?.name}: ${message}). This must NOT be recorded as a successful denial.`,
+  );
+
+  // This is the honest part, and it is why `denied-licensed` exists as a separate step. Pre-mint
+  // the reader has no licence AND there is no licence in existence for this IP, so the request
+  // it sends is empty or names nothing real. The condition contract reverts on such a request
+  // before it ever evaluates authorization — measured, see gate-probes.json probe (a) and (b).
+  // So this step proves the read is refused; it does NOT prove the refusal is about licensing.
   note(
-    "how to read this",
-    "the contract refused the read because the condition contract said the caller holds no " +
-      "license for this IP. The reader wallet is recorded below; its license balance is 0 at " +
-      "this point in the run.",
+    "what this step does NOT prove",
+    "that the refusal was about licensing. Before the mint, no licence token exists, so the " +
+      "condition contract reverts on a malformed/nonexistent reference before its " +
+      "authorization logic runs. Attribution comes from the post-mint probes and from the " +
+      "denied-licensed step, which ask the same question when a real licence does exist.",
   );
 
   writeArtifact(state.runId, "unauthorized-read.json", {
@@ -868,6 +1019,7 @@ async function stepDenied(state: RunState): Promise<RunState> {
     reader: state.wallets.reader,
     readerIsOwner: state.wallets.readerIsOwner,
     licenseTokensHeld: 0,
+    licensesInExistenceForThisIp: 0,
     accessAuxData: "0x",
     request: {
       operation: "CDR read()",
@@ -876,11 +1028,146 @@ async function stepDenied(state: RunState): Promise<RunState> {
       condition: LICENSE_READ_CONDITION_ADDRESS,
     },
     observedError: observed,
-    authorizationShaped,
+    infrastructureShaped,
+    provesLicensing: false,
     note:
-      "No transaction hash is recorded here: the read was rejected by the condition contract, " +
-        "so there is no successful on-chain operation to point at. The refusal is evidenced by " +
-        "the error the node returned and by the gate probes in gate-probes.json.",
+      "No transaction hash is recorded here: the read was rejected, so there is no successful " +
+        "on-chain operation to point at. The refusal is evidenced by the error the node returned.",
+    limitation:
+      "provesLicensing is FALSE on purpose. With empty auxiliary data the condition contract " +
+        "cannot decode the request and reverts before evaluating authorization, so this refusal " +
+        "would look the same for a wallet that DID hold a licence. It shows the read fails " +
+        "without a licence; it does not show the failure is caused by the licence check. " +
+        "See gate-probes.json probe (d) and denied-licensed.json for the attributable evidence.",
+  });
+
+  return state;
+}
+
+/**
+ * STEP 6b — the same denial, asked properly.
+ *
+ * Runs after the mint, so a REAL licence token exists for this IP. The owner wallet holds none
+ * of it (it was minted to the reader), and presents the real token id. This is the shape that
+ * makes the condition contract actually evaluate authorization — and it refuses.
+ *
+ * This is the end-to-end version of gate-probes probe (d): that probe proved the contract's
+ * verdict with a free eth_call; this proves the real read path honours it.
+ */
+async function stepDeniedLicensed(state: RunState): Promise<RunState> {
+  heading("STEP 6b — a wallet with no licence, holding a REAL token id, is refused");
+
+  if (state.license === undefined) fail('run the "mint" step first — this step needs a real licence.');
+  if (state.vault === undefined) fail('run the "vault" step first.');
+  if (state.wallets.readerIsOwner) {
+    note(
+      "skipped",
+      "only one key was supplied, so the owner and the reader are the same wallet. There is no " +
+        "second party to refuse. Set AENEID_READER_PRIVATE_KEY to a different address to run " +
+        "the attributable denial.",
+    );
+    return state;
+  }
+
+  const accessAuxData = encodeLicenseAccessAuxData([BigInt(state.license.licenseTokenId)]);
+
+  // Ground truth first, for free: does the condition contract reach its authorization logic and
+  // say no, for this caller with this real token id?
+  const { ipId } = state.asset as NonNullable<RunState["asset"]>;
+  const conditionVerdict = await publicClient.readContract({
+    address: getAddress(LICENSE_READ_CONDITION_ADDRESS),
+    abi: [
+      {
+        name: "checkReadCondition",
+        type: "function",
+        stateMutability: "view",
+        inputs: [
+          { name: "uuid", type: "uint32" },
+          { name: "accessAuxData", type: "bytes" },
+          { name: "conditionData", type: "bytes" },
+          { name: "caller", type: "address" },
+        ],
+        outputs: [{ type: "bool" }],
+      },
+    ] as const,
+    functionName: "checkReadCondition",
+    args: [
+      state.vault.uuid,
+      accessAuxData,
+      encodeLicenseReadConditionData({
+        licenseTokenAddress: getAddress(AENEID_LICENSE_TOKEN_ADDRESS),
+        ipId: getAddress(ipId),
+      }),
+      getAddress(state.wallets.owner),
+    ],
+  });
+
+  check(
+    "the condition contract evaluates authorization and returns false",
+    conditionVerdict === false,
+    conditionVerdict === false
+      ? "checkReadCondition → false for the owner, who holds no licence token for this IP, " +
+        "while presenting the real token id. The contract REACHED its authorization logic and " +
+        "denied — this is the attributable denial."
+      : `checkReadCondition → ${conditionVerdict}, expected false. The gate is not behaving as recorded.`,
+  );
+
+  const { ownerAccount } = loadWallets();
+  const client = cdrClientFor(
+    createWalletClient({ account: ownerAccount, transport: http(rpcUrl) }),
+  );
+
+  say("  … submitting read() from the unlicensed wallet, presenting the real token id");
+
+  let dataKey: Uint8Array | null = null;
+  let observed: { name: string; message: string } | null = null;
+  try {
+    const result = await client.consumer.accessCDR({
+      uuid: state.vault.uuid,
+      accessAuxData,
+      timeoutMs: 30_000,
+    });
+    dataKey = result.dataKey;
+  } catch (error) {
+    observed = {
+      name: error instanceof Error ? error.name : typeof error,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  if (dataKey !== null) {
+    check(
+      "an unlicensed caller holding a real token id is refused",
+      false,
+      "THE GATE DID NOT HOLD — the read returned a data key to a wallet the condition contract " +
+        "had just said `false` about. The off-chain read path does not honour the on-chain gate. " +
+        "This is the most serious possible result from this harness.",
+    );
+  } else {
+    check(
+      "an unlicensed caller holding a real token id is refused",
+      true,
+      `accessCDR refused with ${observed?.name}. The contract said false and the read path ` +
+        `honoured it: the refusal is attributable to licensing, not to a malformed request.`,
+    );
+  }
+
+  writeArtifact(state.runId, "denied-licensed.json", {
+    observedAt: new Date().toISOString(),
+    outcome: dataKey !== null ? "DATA_KEY_RETURNED" : "REFUSED",
+    caller: state.wallets.owner,
+    callerHoldsLicense: false,
+    accessAuxData,
+    presentsRealLicenseTokenId: state.license.licenseTokenId,
+    licenseTokenOwner: state.license.mintedTo,
+    conditionVerdict,
+    provesLicensing: conditionVerdict === false && dataKey === null,
+    observedError: observed,
+    note:
+      "This is the attributable denial. Unlike unauthorized-read.json, the request here is " +
+        "well-formed and names a licence token that really exists — it simply belongs to someone " +
+        "else. The condition contract returned false (not a revert), so the refusal is about the " +
+        "caller's licence status, which is exactly what the product claims to enforce.",
   });
 
   return state;
@@ -1103,6 +1390,7 @@ const RUNNERS: Record<
   gate: stepGate,
   denied: stepDenied,
   mint: stepMint,
+  "denied-licensed": stepDeniedLicensed,
   read: stepRead,
   unlock: stepUnlock,
 };
@@ -1119,6 +1407,7 @@ const ALL_ORDER: Array<Exclude<Step, "all">> = [
   "denied",
   "mint",
   "gate",
+  "denied-licensed",
   "read",
   "unlock",
 ];
@@ -1152,6 +1441,27 @@ async function main(): Promise<void> {
   if (existing !== null) {
     note("resuming", `state loaded from evidence/${runId}/_run-state.json`);
   }
+
+  // The CDR SDK's TDH2 encryption lives in a WASM module (cb-mpc) that it never initializes
+  // itself — `uploader.encryptDataKey` calls straight into `tdh2Encrypt`, which throws
+  // "WASM module not initialized. Call initWasm() first." until the host has loaded it.
+  // So the host must. Done here, once, before any step, rather than inside step 3: it is a
+  // precondition of the whole run, and failing here costs no gas.
+  //
+  // initWasm() also SHA-256-verifies the .wasm binary against a hash pinned in the package
+  // (see its wasm/manifest). That is worth having — the encryption path is exactly the code
+  // whose integrity matters most — so we do NOT pass skipHashCheck.
+  try {
+    await initWasm();
+  } catch (error) {
+    fail(
+      `initWasm() failed: ${(error as Error).message}. The TDH2 WASM module could not be ` +
+        `loaded, so the data key cannot be encrypted. Nothing on-chain has been attempted ` +
+        `in this step. Do not bypass this with skipHashCheck — a hash mismatch means the ` +
+        `crypto binary is not the one this SDK expects, which is a finding, not an obstacle.`,
+    );
+  }
+  note("TDH2 WASM", "initialized and hash-verified");
 
   const order: Array<Exclude<Step, "all">> =
     requested === "all" ? ALL_ORDER : [requested];

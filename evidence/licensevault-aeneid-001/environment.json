@@ -1,0 +1,25 @@
+{
+  "runId": "licensevault-aeneid-001",
+  "observedAt": "2026-10-07T17:22:04.910Z",
+  "chain": {
+    "id": 1315,
+    "rpcUrl": "https://aeneid.storyrpc.io",
+    "explorer": "https://aeneid.datanetscan.io"
+  },
+  "cdr": {
+    "apiUrl": "http://172.192.41.96:1317",
+    "note": "plain HTTP — see docs/SECURITY.md §5",
+    "activeRound": 45,
+    "threshold": 3,
+    "participants": 5,
+    "globalPubKeySha256": "a51163ca249ab2be5adb1978956651493a6fb3fbd215fa031a5161d04ab7f221",
+    "maxEncryptedDataSize": "1024"
+  },
+  "wallets": {
+    "owner": "0x75D900D18866D8aA416CCEFD9e85D2C61dB0aCa9",
+    "reader": "0x226e01730F6991C1BD11f58d1204638bee89A863",
+    "readerIsOwner": false,
+    "ownerBalanceWei": "999641424774899736",
+    "readerBalanceWei": "999988704699209329"
+  }
+}
