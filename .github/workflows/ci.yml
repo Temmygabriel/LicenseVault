@@ -51,6 +51,32 @@ jobs:
           NEXT_PUBLIC_STORY_CHAIN_ID: "1315"
           NEXT_PUBLIC_STORY_RPC_URL: "https://aeneid.storyrpc.io"
 
+  evidence-verification:
+    name: independently verify the canonical run
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # The BUILD 3 check. A harness that grades its own homework proves only that it agrees with
+    # itself, so this re-derives the evidence's claims from the chain and from the committed
+    # bytes. It runs in OFFLINE mode: read-only eth_getTransactionReceipt / eth_call against
+    # Aeneid, no private key, nothing spent. It exits non-zero only on a REFUTED claim — an
+    # honest "not verifiable" gap does not fail the build, it is printed.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install (lockfile-strict)
+        run: npm ci
+
+      - name: Verify the canonical run against the chain
+        run: npm run verify:run
+
   secret-scan:
     name: secret scan
     runs-on: ubuntu-latest

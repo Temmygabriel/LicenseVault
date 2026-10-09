@@ -1,14 +1,93 @@
 # LICENSEVAULT — LIVE BUILD PROGRESS
 
 > **This file is the running state of the project. It is updated at every phase boundary.**
-> Last updated: 2026-10-07 — **BUILD 2 IS DONE. The full lock/unlock path ran end to end on live
-> Aeneid and passed every check.** 66 tests. Two protocol findings corrected (details below).
+> Last updated: 2026-10-08 — **BUILD 3 IS DONE. The evidence is now verified by something other
+> than the harness that wrote it.** 40 verified / 0 refuted / 3 honestly unproven offline, and
+> **41 / 0 / 1 with `--live`**, where the strongest claim — that the key from the vault opens the
+> committed content — was re-performed for real. 66 tests.
 
 **Repo:** https://github.com/Temmygabriel/LicenseVault
 **Local:** `C:\Users\USER\Documents\HACKATHONS BUILDS\BLI_LEGALTECH_HACK\LICENSEVAULT`
 **Contracts read:** `LICENSEVAULT_BUILD_SPEC.md` (2005 lines) + `LICENSEVAULT_DEEPSEEK_MASTER_PROMPT.md` (1620 lines)
 
 ---
+
+---
+
+## 🟢 BUILD 3 — THE EVIDENCE IS INDEPENDENTLY VERIFIED (2026-10-08)
+
+**The problem this phase exists to solve:** `tools/spike/build-vault.ts` writes its own evidence.
+A harness that grades its own homework proves only that it agrees with itself. So
+`tools/verify-canonical-run.ts` re-derives every claim from something the harness does not
+control — the chain, the published ABIs, and the bytes in the repository.
+
+```bash
+npm run verify:run              # offline: free, read-only, no key needed
+npm run verify:run -- --live    # also performs a FRESH read and re-decrypts (costs a little gas)
+```
+
+Exit code is **0 only when nothing was refuted**. A `NOT VERIFIABLE` gap does not fail the build —
+an honest gap is not a lie — but it is always counted and printed, never hidden.
+
+### What it checks, and where the answer comes from
+
+| § | Claim re-derived | Source — not the artifact |
+|---|---|---|
+| 1 | we are on chain 1315 | live `eth_chainId` |
+| 2 | every named tx exists, succeeded, and is **attributable to the contract the evidence names** | `eth_getTransactionReceipt`, plus the receipt's own logs |
+| 3 | the vault's read gate is the LicenseReadCondition, bound to **this** IP asset and the real LicenseToken; write gate names the owner; `updatable = false`; payload ≤ 1024 bytes | `vaults(uint32)` read through the ABI **published in `@piplabs/cdr-contracts`**, then decoded from scratch |
+| 4 | `ownerOf(73227)` is the reader; the denial caller holds **zero** licences; PIL terms 2183 exist and are attached | LicenseToken, LicenseRegistry, PILicenseTemplate |
+| 5 | holder → `true`; a NON-holder presenting that **same real token id** → `false` | `checkReadCondition`, re-asked now |
+| 6 | the committed blob is 832 bytes = 804 plaintext + 12 IV + 16 tag; the size matches the manifest written **at seal time**; five artifacts agree on one plaintext hash | the file on disk, measured here |
+| 7 | **the key from the vault actually decrypts the committed content** | a fresh authorized read + `decryptContent`, `--live` only |
+| 8 | no key-shaped literal sits unlabelled anywhere in the evidence | every JSON artifact walked, not grepped |
+
+### Two things this phase caught in its own first draft
+
+Both were the *verifier* being wrong, and both would have been reported as refutations of sound
+evidence. They are recorded because the same trap is easy to fall into again:
+
+1. **`contract` ≠ `receipt.to`.** `ip-asset.json` records the SPG collection address for the
+   creation transaction — which is the address the call **produced**, not the factory it
+   **called** (`0xbe39E1C7…`). The first draft compared the two and refuted a correct artifact.
+   Fixed properly rather than loosened: the check now also accepts the recorded address
+   appearing as a **log emitter** in the receipt, which is genuine independent evidence that the
+   transaction created it — and it says which of the two held.
+2. **A 32-byte ABI blob is key-shaped.** `abi.encode(address)` is 12 zero bytes + an address =
+   exactly 64 hex characters, the same length as a private key. The secret scan now distinguishes
+   a declared tx hash, a field the artifact names as a hash, and a named condition blob — and
+   says which category each match fell into, so the exclusion is visible rather than silent.
+
+### The claim that could only be settled by spending
+
+The single strongest claim — *"the key recovered from the vault decrypts this content"* — needs
+the data key, and the harness **destroys** that key after a successful run, by design. Offline,
+the verifier therefore reports it `NOT VERIFIABLE` and says why, rather than dressing up the
+weaker consistency checks as if they settled it.
+
+`--live` re-performs an authorized read with the reader's key and decrypts the committed bytes:
+
+```
+[VERIFIED ] the key recovered from the vault actually decrypts the committed content
+            a NEW read returned a key, which decrypted the committed blob to sha256
+            46cab4a8232e4eea2265… — byte-for-byte the value recorded at 2026-10-08T16:48:27.309Z.
+```
+
+**Result: 41 verified · 0 refuted · 1 not verifiable.** Offline the same run is
+40 / 0 / 3 — the extra unproven one is the plaintext hash, which live mode settles. The single
+gap that survives even `--live` is structural and stated out loud: `ip-asset.json` names the
+target of the registration transaction by *description* ("Story IPAssetRegistry via
+LicenseAttachmentWorkflows") rather than by address, so no receipt can confirm it. The verifier
+prints the receipt's actual `to` beside it and leaves the judgement to a reader.
+
+The report is written to `evidence/<run>/verification-report.json` — including the mode it ran in
+and every unproven claim, so an offline report can never be mistaken for a live one.
+
+### CI now checks the evidence on every push
+
+`ci.yml` gained a third job, `evidence-verification`, running `npm run verify:run` in offline mode.
+It needs **no secret**, spends nothing, and is deliberately a **separate job** so a transient RPC
+outage cannot mask a real build failure.
 
 ---
 
@@ -173,7 +252,7 @@ machine is 8 GB and the build step is deliberately not run here.
 | BUILD 0 | Repo + environment | ✅ PASS — CI green (run `37311937901`) |
 | BUILD 1 | Protocol discovery | ✅ PASS — all core facts verified |
 | BUILD 2 | Minimal protocol spike | ✅ **PASS — executed end to end on live Aeneid 2026-10-07; ALL CHECKS PASSED** |
-| BUILD 3 | Evidence + verifier | ⬜ NOT STARTED (the spike already writes the evidence; the independent verifier does not exist) |
+| BUILD 3 | Evidence + verifier | ✅ **PASS — `tools/verify-canonical-run.ts`; 41 verified / 0 refuted / 1 unproven with `--live`, 2026-10-08** |
 | BUILD 4 | Protocol adapter | ⬜ NOT STARTED |
 | BUILD 5 | Product UI (four surfaces) | ⬜ NOT STARTED |
 | BUILD 6 | Visual system | ⬜ NOT STARTED |
@@ -608,11 +687,10 @@ and avoids depending on unreleased `main`-branch code.
 5. ~~Commit + push this batch, then confirm the CI run is green.~~ ✅
 6. ~~**BUILD 2** — smallest real protected vault on Aeneid (CLI harness, no UI)~~ ✅ **DONE
    2026-10-07** — executed end to end, all checks passed, every tx hash re-verified on chain.
-7. **BUILD 3 — the independent verifier**, `tools/verify-canonical-run.ts` (already referenced
-   by `npm run verify:run`, **still not written**). It must re-derive the evidence's claims from
-   the chain rather than trusting the JSON the harness wrote — otherwise the evidence proves
-   only that the harness agrees with itself. This is the natural next step: the artifacts now
-   exist for it to check, including a deliberately self-limiting `unauthorized-read.json`.
+7. ~~**BUILD 3 — the independent verifier**, `tools/verify-canonical-run.ts`~~ ✅ **DONE
+   2026-10-08** — 41 verified / 0 refuted / 1 unproven with `--live`. It re-derives every
+   claim from the chain, the published ABIs and the bytes on disk, and is wired into CI as a
+   separate job. Report: `evidence/licensevault-aeneid-001/verification-report.json`.
 8. **BUILD 4 — protocol adapter**, lifting `tools/spike/*` into `lib/protocol/*` so the UI and
    the harness share one implementation. The known product-relevant fact to carry across:
    a read failure must be *decoded* before it is labelled, because a malformed request and a
@@ -629,14 +707,12 @@ and avoids depending on unreleased `main`-branch code.
   11062, licence token 73227, an authorized read that returned a key, a refused read from an
   unlicensed wallet, and content decrypted byte for byte. The mechanism **is** demonstrated end
   to end at the protocol level.
-- What is still not built: **the verifier** that independently re-checks that evidence
-  (BUILD 3), the shared adapter (BUILD 4), and **every user-facing surface** (BUILD 5+). The
-  demonstration above is a CLI harness writing JSON — a judge cannot click it yet.
+- What is still not built: the shared adapter (BUILD 4) and **every user-facing surface**
+  (BUILD 5+). The demonstration above is a CLI harness writing JSON — a judge cannot click it
+  yet. The verifier (BUILD 3) now exists and re-checks that JSON from the chain.
 - The interface (`app/page.tsx`) is a single deliberate non-final surface: it renders the
   Access Docket in `RESTRICTED` with a **disabled** "Check Access" button. It does not
   pretend to verify anything.
-- `evidence/` does not exist. It is created only when real events occur.
-- `tools/verify-canonical-run.ts` does not exist yet (BUILD 5).
 - `docs/UX_TEST.md` has been written but **the test has not been run** — no human has been
   tested. The results table is deliberately blank.
 
@@ -644,7 +720,7 @@ and avoids depending on unreleased `main`-branch code.
 
 ## BLOCKERS
 
-**None. BUILD 2 is unblocked and complete.**
+**None. BUILD 2 and BUILD 3 are unblocked and complete.**
 
 The wallets were funded on 2026-10-07 and the run executed. Both went from `0x0` to exactly
 `1 IP`, so the balance is provably the faucet drip:
@@ -669,8 +745,9 @@ observed by us directly — the URL and the 10 IP figure come from the docs page
 
 Remaining dependencies, none of them blocking:
 
-- **BUILD 3+ has not started.** The spike writes evidence, but the verifier that re-checks it
-  independently (`npm run verify:run`) does not exist yet.
+- **BUILD 3 is complete**; the verifier re-checks the evidence independently on every push.
+  What is not yet done is the shared adapter (BUILD 4) and every surface a judge can click
+  (BUILD 5+).
 - The Story-API endpoint risk (§7) is confirmed open but characterised: **availability, not
   confidentiality**. It does not block BUILD 2–8 and must be resolved before BUILD 9.
 

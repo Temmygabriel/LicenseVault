@@ -1,0 +1,225 @@
+{
+  "verifier": "tools/verify-canonical-run.ts",
+  "mode": "live",
+  "generatedAt": "2026-10-09T04:15:38.123Z",
+  "rpcUrl": "https://aeneid.storyrpc.io",
+  "runId": "licensevault-aeneid-001",
+  "exitCode": 0,
+  "counts": {
+    "verified": 41,
+    "refuted": 0,
+    "notVerifiable": 1
+  },
+  "claims": [
+    {
+      "statement": "the run state exists and parses",
+      "verdict": "VERIFIED",
+      "detail": "run \"licensevault-aeneid-001\", chain 1315, 8 top-level fields"
+    },
+    {
+      "statement": "the RPC reports chain 1315",
+      "verdict": "VERIFIED",
+      "detail": "eth_chainId → 1315 via https://aeneid.storyrpc.io"
+    },
+    {
+      "statement": "tx for \"create SPG NFT collection\" exists on chain",
+      "verdict": "VERIFIED",
+      "detail": "0x914a14602d5785f7… in block 24623222, status success"
+    },
+    {
+      "statement": "tx for \"create SPG NFT collection\" succeeded",
+      "verdict": "VERIFIED",
+      "detail": "the transaction was mined and did not revert"
+    },
+    {
+      "statement": "tx for \"create SPG NFT collection\" is attributable to the contract the evidence names",
+      "verdict": "VERIFIED",
+      "detail": "receipt.to = 0xbe39e1c756e921bd25df86e7aaa31106d1eb0424, not the recorded 0x52bA3120c58056D0c9be496950C3864E056b0B7a — but this transaction emitted log entries from 0x52bA3120c58056D0c9be496950C3864E056b0B7a in its logs, so the receipt shows that contract was created by it. The artifact's `contract` field names the address the operation produced, not the address it called."
+    },
+    {
+      "statement": "tx for \"mint NFT and register IP asset with PIL Commercial Use terms\" exists on chain",
+      "verdict": "VERIFIED",
+      "detail": "0x574454f964858b4c… in block 24623227, status success"
+    },
+    {
+      "statement": "tx for \"mint NFT and register IP asset with PIL Commercial Use terms\" succeeded",
+      "verdict": "VERIFIED",
+      "detail": "the transaction was mined and did not revert"
+    },
+    {
+      "statement": "tx for \"mint NFT and register IP asset with PIL Commercial Use terms\" was sent to the contract the evidence names",
+      "verdict": "NOT VERIFIABLE",
+      "detail": "the artifact names the target descriptively (\"Story IPAssetRegistry via LicenseAttachmentWorkflows\") rather than by address, so it cannot be checked against the receipt. The receipt's actual to = 0xcc2e862bcee5b6036db0de6e06ae87e524a79fd8 — read it and decide whether that is the contract the description means."
+    },
+    {
+      "statement": "tx for \"allocate vault\" exists on chain",
+      "verdict": "VERIFIED",
+      "detail": "0x53a78ecc8eee79c2… in block 24623294, status success"
+    },
+    {
+      "statement": "tx for \"allocate vault\" succeeded",
+      "verdict": "VERIFIED",
+      "detail": "the transaction was mined and did not revert"
+    },
+    {
+      "statement": "tx for \"allocate vault\" is attributable to the contract the evidence names",
+      "verdict": "VERIFIED",
+      "detail": "receipt.to = 0xCCCcCC0000000000000000000000000000000005 — the call went straight to the recorded contract"
+    },
+    {
+      "statement": "tx for \"write encrypted data key\" exists on chain",
+      "verdict": "VERIFIED",
+      "detail": "0x37c52af6a0b2fe3d… in block 24623297, status success"
+    },
+    {
+      "statement": "tx for \"write encrypted data key\" succeeded",
+      "verdict": "VERIFIED",
+      "detail": "the transaction was mined and did not revert"
+    },
+    {
+      "statement": "tx for \"write encrypted data key\" is attributable to the contract the evidence names",
+      "verdict": "VERIFIED",
+      "detail": "receipt.to = 0xCCCcCC0000000000000000000000000000000005 — the call went straight to the recorded contract"
+    },
+    {
+      "statement": "tx for \"mint license token\" exists on chain",
+      "verdict": "VERIFIED",
+      "detail": "0xf66ca3499c7c49ad… in block 24623301, status success"
+    },
+    {
+      "statement": "tx for \"mint license token\" succeeded",
+      "verdict": "VERIFIED",
+      "detail": "the transaction was mined and did not revert"
+    },
+    {
+      "statement": "tx for \"CDR read() as a license holder\" exists on chain",
+      "verdict": "VERIFIED",
+      "detail": "0xaaec7f41637e65d4… in block 24623473, status success"
+    },
+    {
+      "statement": "tx for \"CDR read() as a license holder\" succeeded",
+      "verdict": "VERIFIED",
+      "detail": "the transaction was mined and did not revert"
+    },
+    {
+      "statement": "tx for \"CDR read() as a license holder\" is attributable to the contract the evidence names",
+      "verdict": "VERIFIED",
+      "detail": "receipt.to = 0xCCCcCC0000000000000000000000000000000005 — the call went straight to the recorded contract"
+    },
+    {
+      "statement": "vault uuid 11062 exists on the CDR contract",
+      "verdict": "VERIFIED",
+      "detail": "read directly from 0xCCCcCC0000000000000000000000000000000005, not from the artifact"
+    },
+    {
+      "statement": "the vault's read gate is the LicenseReadCondition",
+      "verdict": "VERIFIED",
+      "detail": "readConditionAddr = 0xC0640AD4CF2CaA9914C8e5C44234359a9102f7a3, and the run's gate probes were taken against this same contract"
+    },
+    {
+      "statement": "the vault's write gate is the OwnerWriteCondition",
+      "verdict": "VERIFIED",
+      "detail": "writeConditionAddr = 0x4C9bFC96d7092b590D497A191826C3dA2277c34B"
+    },
+    {
+      "statement": "the vault's gate is bound to this run's IP asset and the real LicenseToken",
+      "verdict": "VERIFIED",
+      "detail": "decoded readConditionData → ipId 0x6C6046f021093c54F43663Fad93037E6556Bfdd8, licenseToken 0xFe3838BFb30B34170F00030B52eA4893d8aAC6bC. That ipId is the asset this run registered, so the licence that opens this vault is a licence for THIS asset and no other."
+    },
+    {
+      "statement": "the vault's write gate names the owner wallet",
+      "verdict": "VERIFIED",
+      "detail": "decoded writeConditionData → 0x75D900D18866D8aA416CCEFD9e85D2C61dB0aCa9, the owner wallet"
+    },
+    {
+      "statement": "the vault is immutable (updatable = false)",
+      "verdict": "VERIFIED",
+      "detail": "updatable = false — the gate cannot be swapped after allocation"
+    },
+    {
+      "statement": "the vault payload respects the 1024-byte cap",
+      "verdict": "VERIFIED",
+      "detail": "235 bytes on chain, within the contract's own maxEncryptedDataSize() of 1024"
+    },
+    {
+      "statement": "the vault holds a key-sized payload, not the content itself",
+      "verdict": "VERIFIED",
+      "detail": "235 bytes on chain vs Commercial Brand Asset Pack's content on disk. The vault cannot hold a file, which is why lib/protocol/content.ts encrypts the content separately."
+    },
+    {
+      "statement": "licence token 73227 exists and is owned by the reader",
+      "verdict": "VERIFIED",
+      "detail": "ownerOf(73227) = 0x226e01730F6991C1BD11f58d1204638bee89A863, and the artifact records it was minted to 0x226e01730F6991C1BD11f58d1204638bee89A863. Re-derived from the chain, not read from the JSON."
+    },
+    {
+      "statement": "the wallet used for the attributable denial holds no licence at all",
+      "verdict": "VERIFIED",
+      "detail": "balanceOf(0x75D900D18866D8aA416CCEFD9e85D2C61dB0aCa9) = 0. The denial in denied-licensed.json is therefore a genuine unlicensed caller, not a holder presenting a wrong token id."
+    },
+    {
+      "statement": "PIL terms 2183 are attached to the IP asset",
+      "verdict": "VERIFIED",
+      "detail": "LicenseRegistry.hasIpAttachedLicenseTerms(ipId, PILicenseTemplate, 2183) = true"
+    },
+    {
+      "statement": "PIL terms 2183 exist in the template",
+      "verdict": "VERIFIED",
+      "detail": "the terms id is real, not a placeholder"
+    },
+    {
+      "statement": "the licence holder is allowed, re-asked now",
+      "verdict": "VERIFIED",
+      "detail": "checkReadCondition(uuid 11062, token 73227, caller = reader) → true"
+    },
+    {
+      "statement": "a NON-holder presenting that same real token id is still denied",
+      "verdict": "VERIFIED",
+      "detail": "checkReadCondition(… same token id …, caller = owner) → false. The SAME request that succeeded for the holder fails for a wallet that owns no licence, so the gate is bound to the caller's licence and not to the mere presence of a valid token id."
+    },
+    {
+      "statement": "the sealed blob is present and hashable",
+      "verdict": "VERIFIED",
+      "detail": "832 bytes, sha256 c550abdd71b80262… — the file the harness actually committed, measured here rather than quoted from an artifact."
+    },
+    {
+      "statement": "the sealed blob's size is exactly its recorded plaintext + IV + tag",
+      "verdict": "VERIFIED",
+      "detail": "804 recorded plaintext bytes + 12-byte IV + 16-byte tag = 832, and the file on disk is 832 bytes. The declared plaintext length is arithmetically consistent with the committed ciphertext."
+    },
+    {
+      "statement": "the committed ciphertext matches the size recorded at seal time",
+      "verdict": "VERIFIED",
+      "detail": "832 bytes on disk = the 832 bytes recorded in protected-content-manifest.json, which was written when the content was sealed and before any unlock was claimed."
+    },
+    {
+      "statement": "every artifact records the same plaintext hash",
+      "verdict": "VERIFIED",
+      "detail": "all 5 records agree on 46cab4a8232e4eea2265… That is consistency, not proof — see section 7 for the check that actually matters."
+    },
+    {
+      "statement": "the two steps agree on which key was used",
+      "verdict": "VERIFIED",
+      "detail": "the key fingerprint in authorized-read.json equals the one in decrypted-resource.json (4a6da4fdb2a559ca…). The key that decrypted the content is the key that the read returned."
+    },
+    {
+      "statement": "the run's own record names the asset the product ships",
+      "verdict": "VERIFIED",
+      "detail": "the artifact records \"Commercial Brand Asset Pack\", matching PROTECTED_ASSET_NAME"
+    },
+    {
+      "statement": "the key recovered from the vault actually decrypts the committed content",
+      "verdict": "VERIFIED",
+      "detail": "a NEW read returned a key, which decrypted the committed blob to sha256 46cab4a8232e4eea2265… — byte-for-byte the value recorded at 2026-10-09T04:15:38.089Z. The vault genuinely gates content, and the content genuinely opens."
+    },
+    {
+      "statement": "no key-shaped literal sits unlabelled in the evidence",
+      "verdict": "VERIFIED",
+      "detail": "all 12 JSON artifacts scanned. Every 32-byte literal is a declared transaction hash, one of 8 field(s) the artifact names as a hash (dataKeySha256, plaintextSha256, plaintextSha256BeforeRun, cdr.globalPubKeySha256), or one of 1 ABI-encoded condition blob(s). Nothing on disk has the unexplained shape of a private key."
+    },
+    {
+      "statement": "the data key is not on disk",
+      "verdict": "VERIFIED",
+      "detail": "no artifact records the data key itself — only a sha256 fingerprint for comparison. The key existed in memory during the run and on chain inside the vault, and nowhere else."
+    }
+  ]
+}
