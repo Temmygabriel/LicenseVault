@@ -38,23 +38,16 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   bytesToHex,
-  createPublicClient,
-  createWalletClient,
   formatEther,
   getAddress,
   hexToBytes,
-  http,
+  type Account,
   type Address,
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import {
-  CDRClient,
-  initWasm,
-  type CDRPublicClient,
-  type CDRWalletClient,
-} from "@piplabs/cdr-sdk";
-import { StoryClient, PILFlavor } from "@story-protocol/core-sdk";
+import { initWasm, type CDRClient } from "@piplabs/cdr-sdk";
+import { PILFlavor } from "@story-protocol/core-sdk";
 import {
   encodeLicenseAccessAuxData,
   encodeLicenseReadConditionData,
@@ -65,11 +58,8 @@ import {
   AENEID_CHAIN_ID,
   AENEID_FAUCET_URL,
   AENEID_LICENSE_TOKEN_ADDRESS,
-  AENEID_RPC_URL,
   CANONICAL_RUN_ID,
   CDR_ADDRESS,
-  CDR_API_URL_AENEID,
-  CDR_NETWORK,
   LICENSE_READ_CONDITION_ADDRESS,
   OWNER_WRITE_CONDITION_ADDRESS,
   PROTECTED_ASSET_NAME,
@@ -84,6 +74,21 @@ import {
   generateDataKey,
   sha256Hex,
 } from "../../lib/protocol/content";
+// Client construction lives in lib/protocol/clients.ts, for the same reason the gate rule does:
+// the UI has to reach these contracts the same way, and a second construction site is a second
+// place for the RPC, the API URL and the SDK's structural casts to drift.
+import {
+  cdrApiUrl,
+  createAeneidPublicClient,
+  createAeneidWalletClient,
+  createCdrClient,
+  createCdrObserverClient,
+  createStoryClient,
+  rpcUrl,
+} from "../../lib/protocol/clients";
+// The gate-probing rule lives in lib/protocol/gate.ts so the UI and this harness classify a
+// refusal the same way. There is exactly one implementation of "a revert is not a denial".
+import { probeReadCondition } from "../../lib/protocol/gate";
 import {
   PreconditionError,
   SCRATCH_DIR,
@@ -153,10 +158,7 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-const rpcUrl = process.env.STORY_RPC_URL ?? AENEID_RPC_URL;
-const cdrApiUrl = process.env.CDR_API_URL ?? CDR_API_URL_AENEID;
-
-const publicClient = createPublicClient({ transport: http(rpcUrl) });
+const publicClient = createAeneidPublicClient();
 
 /**
  * The reader's wallet. A separate key is strongly preferred: it proves the gate is about the
@@ -177,23 +179,13 @@ function loadWallets() {
     ownerAccount,
     readerAccount,
     readerIsOwner,
-    ownerWallet: createWalletClient({ account: ownerAccount, transport: http(rpcUrl) }),
-    readerWallet: createWalletClient({
-      account: readerAccount,
-      transport: http(rpcUrl),
-    }),
+    ownerWallet: createAeneidWalletClient(ownerAccount),
+    readerWallet: createAeneidWalletClient(readerAccount),
   };
 }
 
-function cdrClientFor(wallet: ReturnType<typeof createWalletClient>): CDRClient {
-  return new CDRClient({
-    network: CDR_NETWORK,
-    apiUrl: cdrApiUrl,
-    // The SDK publishes structural client types precisely so a viem client can be passed
-    // without a version-matching dance. The casts are the documented seam.
-    publicClient: publicClient as unknown as CDRPublicClient,
-    walletClient: wallet as unknown as CDRWalletClient,
-  });
+function cdrClientFor(account: Account): CDRClient {
+  return createCdrClient({ account, publicClient });
 }
 
 async function assertFunded(address: Address, label: string): Promise<bigint> {
@@ -276,7 +268,7 @@ async function stepEnvironment(state: RunState): Promise<RunState> {
   check(
     "chain id",
     chainId === AENEID_CHAIN_ID,
-    `chain ${chainId} (expected ${AENEID_CHAIN_ID}) via ${rpcUrl}`,
+    `chain ${chainId} (expected ${AENEID_CHAIN_ID}) via ${rpcUrl()}`,
   );
   if (chainId !== AENEID_CHAIN_ID) fail("wrong network — refusing to submit anything.");
 
@@ -298,12 +290,7 @@ async function stepEnvironment(state: RunState): Promise<RunState> {
   );
 
   // ── DKG state, read through the SDK's own observer ────────────────────────
-  const observerClient = new CDRClient({
-    network: CDR_NETWORK,
-    apiUrl: cdrApiUrl,
-    publicClient: publicClient as unknown as CDRPublicClient,
-  });
-  const observer = observerClient.observer;
+  const observer = createCdrObserverClient({ publicClient }).observer;
 
   const [activeRound, threshold, participants, globalPubKey, maxSize] = await Promise.all([
     observer.getActiveRound(),
@@ -319,7 +306,7 @@ async function stepEnvironment(state: RunState): Promise<RunState> {
   check(
     "Story API reachable",
     Number.isInteger(activeRound) && threshold > 0,
-    `${cdrApiUrl} answered with a usable round and threshold. This is the plain-HTTP endpoint ` +
+    `${cdrApiUrl()} answered with a usable round and threshold. This is the plain-HTTP endpoint ` +
       `recorded in docs/SECURITY.md §5; it is reachable from this machine right now.`,
   );
   check(
@@ -339,9 +326,9 @@ async function stepEnvironment(state: RunState): Promise<RunState> {
   writeArtifact(state.runId, "environment.json", {
     runId: state.runId,
     observedAt: new Date().toISOString(),
-    chain: { id: chainId, rpcUrl, explorer: explorerTxUrl("").replace(/\/tx\/$/, "") },
+    chain: { id: chainId, rpcUrl: rpcUrl(), explorer: explorerTxUrl("").replace(/\/tx\/$/, "") },
     cdr: {
-      apiUrl: cdrApiUrl,
+      apiUrl: cdrApiUrl(),
       note: "plain HTTP — see docs/SECURITY.md §5",
       activeRound,
       threshold,
@@ -374,11 +361,7 @@ async function stepAsset(state: RunState): Promise<RunState> {
   }
 
   const { ownerAccount } = loadWallets();
-  const story = StoryClient.newClient({
-    account: ownerAccount,
-    transport: http(rpcUrl),
-    chainId: AENEID_CHAIN_ID,
-  });
+  const story = createStoryClient(ownerAccount);
 
   // 1. Our own SPG NFT collection. Deploying one keeps the run self-contained: no
   //    third-party collection address is assumed, so nothing here can be wrong-but-plausible.
@@ -502,9 +485,7 @@ async function stepVault(state: RunState): Promise<RunState> {
   if (state.vault !== undefined) {
     note("already done", `uuid ${state.vault.uuid} — reusing the existing vault`);
   } else {
-    const client = cdrClientFor(
-      createWalletClient({ account: ownerAccount, transport: http(rpcUrl) }),
-    );
+    const client = cdrClientFor(ownerAccount);
 
     const dataKey = generateDataKey();
     const content = buildProtectedContent(state.asset.ipId, null);
@@ -560,9 +541,7 @@ async function stepVault(state: RunState): Promise<RunState> {
   }
 
   // ── Verify the gate that is actually ON CHAIN, not the one we meant to write ──
-  const observerClient = cdrClientFor(
-    createWalletClient({ account: ownerAccount, transport: http(rpcUrl) }),
-  );
+  const observerClient = cdrClientFor(ownerAccount);
   const vault = await observerClient.observer.getVault(state.vault.uuid);
 
   const onChainRead = vault.readConditionData as Hex;
@@ -704,24 +683,6 @@ interface GateProbe {
   error: string | null;
 }
 
-/** Known custom errors this condition contract can revert with. */
-const KNOWN_REVERTS: ReadonlyArray<{ signature: Hex; name: string; meaning: string }> = [
-  {
-    signature: "0x7e273289",
-    name: "ERC721NonexistentToken(uint256)",
-    meaning:
-      "the licence token id in accessAuxData was never minted, so `ownerOf` reverted — the " +
-      "contract never reached an authorization decision",
-  },
-];
-
-/** Read the 4-byte selector out of a viem error message, if the node supplied revert data. */
-function revertSelectorFromMessage(message: string): Hex | null {
-  const match = /0x[0-9a-fA-F]{8}\b/.exec(message);
-  if (match === null) return null;
-  return match[0] as Hex;
-}
-
 async function probeGate(
   state: RunState,
   collector: GateProbe[],
@@ -736,53 +697,47 @@ async function probeGate(
     ipId: getAddress(ipId),
   });
 
-  let observed: boolean | null = null;
-  let error: string | null = null;
+  // The probe itself lives in lib/protocol/gate.ts, shared with the UI. Classifying a revert
+  // is the one rule in this project that is easiest to get silently wrong, so there is
+  // exactly one implementation of it and this harness is a caller of it, not a second opinion.
+  const verdict = await probeReadCondition({
+    publicClient,
+    uuid: state.vault?.uuid ?? 0,
+    accessAuxData,
+    conditionData,
+    caller,
+  });
 
-  try {
-    observed = await publicClient.readContract({
-      address: getAddress(LICENSE_READ_CONDITION_ADDRESS),
-      abi: [
-        {
-          name: "checkReadCondition",
-          type: "function",
-          stateMutability: "view",
-          inputs: [
-            { name: "uuid", type: "uint32" },
-            { name: "accessAuxData", type: "bytes" },
-            { name: "conditionData", type: "bytes" },
-            { name: "caller", type: "address" },
-          ],
-          outputs: [{ type: "bool" }],
-        },
-      ] as const,
-      functionName: "checkReadCondition",
-      args: [state.vault?.uuid ?? 0, accessAuxData, conditionData, caller],
-    });
-  } catch (caught) {
-    error = caught instanceof Error ? caught.message : String(caught);
-  }
-
-  // Resolve what actually happened into something comparable to the expectation.
+  // Map the typed verdict back onto what this probe expected. Keeping the mapping here — and
+  // not in the shared module — is what lets the shared module stay about the PROTOCOL while
+  // this file stays about the EXPERIMENT.
   let observedText: string;
   let matched: boolean;
+  let error: string | null = null;
 
-  if (error === null) {
-    observedText = String(observed);
-    matched = expectation.kind === "returns" && observed === expectation.value;
-  } else if (expectation.kind === "returns") {
-    observedText = `reverted (expected to return ${String(expectation.value)})`;
-    matched = false;
-  } else {
-    const selector = revertSelectorFromMessage(error);
-    const known = KNOWN_REVERTS.find((k) => k.signature === selector);
-    if (expectation.kind === "revertsOpaque") {
-      observedText = known === undefined ? "reverted (no decodable reason)" : `reverted ${known.name}`;
-      matched = known === undefined;
-    } else {
-      observedText = known === undefined ? `reverted (undecodable ${selector ?? "nothing"})` : `reverted ${known.name}`;
-      matched = selector === expectation.signature;
-    }
+  switch (verdict.kind) {
+    case "ALLOWED":
+      observedText = "true";
+      matched = expectation.kind === "returns" && expectation.value === true;
+      break;
+    case "DENIED":
+      observedText = "false";
+      matched = expectation.kind === "returns" && expectation.value === false;
+      break;
+    case "REJECTED_REQUEST":
+      observedText =
+        verdict.errorName === null ? "reverted (no decodable reason)" : `reverted ${verdict.errorName}`;
+      matched =
+        expectation.kind === "revertsOpaque"
+          ? verdict.selector === null
+          : expectation.kind === "reverts" && verdict.selector === expectation.signature;
+      error = verdict.message;
+      break;
+    case "UNKNOWN":
+      observedText = `reverted (undecodable ${verdict.selector ?? "nothing"})`;
+      matched = false;
+      error = verdict.message;
+      break;
   }
 
   const expectedText =
@@ -942,9 +897,7 @@ async function stepDenied(state: RunState): Promise<RunState> {
   }
 
   const { readerAccount } = loadWallets();
-  const client = cdrClientFor(
-    createWalletClient({ account: readerAccount, transport: http(rpcUrl) }),
-  );
+  const client = cdrClientFor(readerAccount);
 
   say("  … submitting read() from a wallet that holds no license token");
 
@@ -1113,9 +1066,7 @@ async function stepDeniedLicensed(state: RunState): Promise<RunState> {
   );
 
   const { ownerAccount } = loadWallets();
-  const client = cdrClientFor(
-    createWalletClient({ account: ownerAccount, transport: http(rpcUrl) }),
-  );
+  const client = cdrClientFor(ownerAccount);
 
   say("  … submitting read() from the unlicensed wallet, presenting the real token id");
 
@@ -1184,11 +1135,7 @@ async function stepMint(state: RunState): Promise<RunState> {
   }
 
   const { ownerAccount } = loadWallets();
-  const story = StoryClient.newClient({
-    account: ownerAccount,
-    transport: http(rpcUrl),
-    chainId: AENEID_CHAIN_ID,
-  });
+  const story = createStoryClient(ownerAccount);
 
   say("  … minting 1 license token for the reader");
   const minted = await story.license.mintLicenseTokens({
@@ -1255,9 +1202,7 @@ async function stepRead(state: RunState): Promise<RunState> {
   }
 
   const { readerAccount } = loadWallets();
-  const client = cdrClientFor(
-    createWalletClient({ account: readerAccount, transport: http(rpcUrl) }),
-  );
+  const client = cdrClientFor(readerAccount);
 
   const accessAuxData = encodeLicenseAccessAuxData([
     BigInt(state.license.licenseTokenId),
@@ -1423,8 +1368,8 @@ async function main(): Promise<void> {
   say("LICENSEVAULT — BUILD 2: real lock, real unlock");
   say("───────────────────────────────────────────────────────────");
   say(`  run:   ${runId}`);
-  say(`  rpc:   ${rpcUrl}`);
-  say(`  cdr:   ${cdrApiUrl}`);
+  say(`  rpc:   ${rpcUrl()}`);
+  say(`  cdr:   ${cdrApiUrl()}`);
   say(`  step:  ${requested}`);
 
   if (requested !== "all" && !STEPS.includes(requested as (typeof STEPS)[number])) {

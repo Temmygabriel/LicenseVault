@@ -1,14 +1,63 @@
 # LICENSEVAULT — LIVE BUILD PROGRESS
 
 > **This file is the running state of the project. It is updated at every phase boundary.**
-> Last updated: 2026-10-08 — **BUILD 3 IS DONE. The evidence is now verified by something other
-> than the harness that wrote it.** 40 verified / 0 refuted / 3 honestly unproven offline, and
-> **41 / 0 / 1 with `--live`**, where the strongest claim — that the key from the vault opens the
-> committed content — was re-performed for real. 66 tests.
+> Last updated: 2026-10-10 — **BUILD 4 IS DONE. There is now exactly one implementation of the
+> protocol, and the harness is a caller of it.** The UI and the CLI no longer have two opinions
+> about what a refusal means. 40 / 0 / 3 offline and 41 / 0 / 1 live are unchanged by the lift —
+> the same verifier, the same evidence, the same verdict. 93 tests.
 
 **Repo:** https://github.com/Temmygabriel/LicenseVault
 **Local:** `C:\Users\USER\Documents\HACKATHONS BUILDS\BLI_LEGALTECH_HACK\LICENSEVAULT`
 **Contracts read:** `LICENSEVAULT_BUILD_SPEC.md` (2005 lines) + `LICENSEVAULT_DEEPSEEK_MASTER_PROMPT.md` (1620 lines)
+
+---
+
+## 🟢 BUILD 4 — ONE IMPLEMENTATION OF THE PROTOCOL (2026-10-10)
+
+**The problem this phase exists to solve:** `tools/spike/build-vault.ts` learned, the hard way, the
+rule that makes this product honest — *a revert is not a denial*. It learned it at 2am, in its own
+file, in its own words. The UI needs that same rule. If the UI re-derives it separately, the two
+implementations drift, and the drift will land exactly on the case that matters: a licensee whose
+read failed being told they have no licence.
+
+So the rule was lifted out of the harness into `lib/protocol/`, and the harness was rewired to
+consume it. It is now a caller, not a second opinion.
+
+| Module | What it owns | Why it is shared |
+|---|---|---|
+| `lib/protocol/gate.ts` | `interpretConditionObservation`, `probeReadCondition`, the known-revert table | "A revert is not a denial" is the single easiest rule in this project to get silently wrong. One implementation, 15 unit tests. |
+| `lib/protocol/access.ts` | `classifyReadFailure`, `requestDataKey`, `readVaultOnChain`, `failureForAttempt` | The word used for a failure is the product. A timeout must not become `NO_LICENSE`, and a malformed *request* must not become `AUTHORIZATION_FAILURE`. |
+| `lib/protocol/clients.ts` | viem / Story / CDR client construction, `rpcUrl()`, `cdrApiUrl()` | Two construction sites are two places for the RPC, the API URL and the SDK's structural casts to drift. Nothing here reads a key. |
+
+**The decisions inside the lift, and the reasoning that produced them:**
+
+1. **`MALFORMED_REQUEST` maps to `INFRASTRUCTURE_FAILURE`, never to `AUTHORIZATION_FAILURE`.**
+   A malformed request is *our* defect. Reporting it as the user's lack of a licence would be a lie
+   with a victim. `tests/access.test.ts` asserts this on its own line, labelled as the most
+   important assertion in the file.
+2. **An unrecognised revert selector is `UNKNOWN`, not `DENIED`.** A selector we do not know means
+   the contract changed. The build contract says an unverified protocol fact stops the phase; it
+   does not say it may be read optimistically.
+3. **`createCdrObserverClient` exists so the public read path needs no key at all.** The DKG round,
+   threshold and global public key are properties of the network, not of an account.
+4. **No stub.** `readVaultOnChain` was first written as a throwing "not implemented" placeholder and
+   deleted the same hour — a stub pretending to be an API is exactly the no-fake rule this project
+   is built on. It is implemented for real against the published `cdrAbi`.
+
+**Evidence the lift is behaviour-preserving:** the independent verifier still returns
+**40 verified / 0 refuted / 3 unproven** offline against the same committed run. The harness's
+verdicts in step 4 are now produced by the shared module, and they agree with what was recorded.
+
+**One trap caught while doing this, worth recording.** Running the verifier offline to prove the
+lift was safe **overwrote the committed live report** (`verification-report.json`, 41 / 0 / 1) with
+a weaker offline one. It was caught by reading the diff before committing, and the live record was
+restored from git. The fix is in the verifier, not in a resolution to be careful: the report
+filename now carries the mode, so the committed live record can never be clobbered by the free
+re-run — and the offline report, which CI regenerates on every push, is gitignored.
+
+**Tests: 66 → 93.** 15 for the gate, 12 for the access classifier, all built from the *real* viem
+messages captured on live Aeneid (they are copied out of `evidence/licensevault-aeneid-001/`), so a
+regression fails against measured protocol behaviour rather than against an assumption.
 
 ---
 
@@ -253,7 +302,7 @@ machine is 8 GB and the build step is deliberately not run here.
 | BUILD 1 | Protocol discovery | ✅ PASS — all core facts verified |
 | BUILD 2 | Minimal protocol spike | ✅ **PASS — executed end to end on live Aeneid 2026-10-07; ALL CHECKS PASSED** |
 | BUILD 3 | Evidence + verifier | ✅ **PASS — `tools/verify-canonical-run.ts`; 41 verified / 0 refuted / 1 unproven with `--live`, 2026-10-08** |
-| BUILD 4 | Protocol adapter | ⬜ NOT STARTED |
+| BUILD 4 | Protocol adapter | ✅ **PASS — `lib/protocol/{gate,access,clients}.ts`; harness rewired onto them; verifier verdict unchanged (40/0/3 offline), 93 tests, 2026-10-10** |
 | BUILD 5 | Product UI (four surfaces) | ⬜ NOT STARTED |
 | BUILD 6 | Visual system | ⬜ NOT STARTED |
 | BUILD 7 | Security / adversarial | ⬜ NOT STARTED |
@@ -691,12 +740,18 @@ and avoids depending on unreleased `main`-branch code.
    2026-10-08** — 41 verified / 0 refuted / 1 unproven with `--live`. It re-derives every
    claim from the chain, the published ABIs and the bytes on disk, and is wired into CI as a
    separate job. Report: `evidence/licensevault-aeneid-001/verification-report.json`.
-8. **BUILD 4 — protocol adapter**, lifting `tools/spike/*` into `lib/protocol/*` so the UI and
-   the harness share one implementation. The known product-relevant fact to carry across:
-   a read failure must be *decoded* before it is labelled, because a malformed request and a
-   missing licence are not the same refusal (finding 2).
-9. **BUILD 8 — Vercel.** User has offered to issue a token so deployment can be driven the same
-   way GitHub is. Not needed until the UI exists; raise it when BUILD 5 lands.
+8. ~~**BUILD 4 — protocol adapter**, lifting `tools/spike/*` into `lib/protocol/*` so the UI and
+   the harness share one implementation.~~ ✅ **DONE 2026-10-10** — `lib/protocol/gate.ts` (the
+   revert-is-not-a-denial rule), `lib/protocol/access.ts` (failure classification, the real read,
+   the on-chain vault record) and `lib/protocol/clients.ts` (client construction). The harness now
+   imports all three and keeps none of its own copies. 93 tests; the verifier's verdict is
+   unchanged, which is the point.
+9. **BUILD 5 — the product UI.** Before writing any of it, read the preflight pack at
+   `..\LicenseVault_UI_Preflight_Pack\LicenseVault_UI_Preflight_Pack` — it was prepared for exactly
+   this phase and has not been consulted yet. Do not open the image files in it (the vision path
+   errors out); read the text files.
+10. **BUILD 8 — Vercel.** User has offered to issue a token so deployment can be driven the same
+    way GitHub is. Not needed until the UI exists; raise it when BUILD 5 lands.
 
 ---
 
@@ -707,9 +762,10 @@ and avoids depending on unreleased `main`-branch code.
   11062, licence token 73227, an authorized read that returned a key, a refused read from an
   unlicensed wallet, and content decrypted byte for byte. The mechanism **is** demonstrated end
   to end at the protocol level.
-- What is still not built: the shared adapter (BUILD 4) and **every user-facing surface**
-  (BUILD 5+). The demonstration above is a CLI harness writing JSON — a judge cannot click it
-  yet. The verifier (BUILD 3) now exists and re-checks that JSON from the chain.
+- What is still not built: **every user-facing surface** (BUILD 5+). The demonstration above is a
+  CLI harness writing JSON — a judge cannot click it yet. BUILD 3 re-checks that JSON from the
+  chain, and BUILD 4 means the UI that gets built next will consume the *same* gate rule and the
+  *same* failure classifier rather than re-deriving them.
 - The interface (`app/page.tsx`) is a single deliberate non-final surface: it renders the
   Access Docket in `RESTRICTED` with a **disabled** "Check Access" button. It does not
   pretend to verify anything.
@@ -720,7 +776,7 @@ and avoids depending on unreleased `main`-branch code.
 
 ## BLOCKERS
 
-**None. BUILD 2 and BUILD 3 are unblocked and complete.**
+**None. BUILD 2, BUILD 3 and BUILD 4 are unblocked and complete.**
 
 The wallets were funded on 2026-10-07 and the run executed. Both went from `0x0` to exactly
 `1 IP`, so the balance is provably the faucet drip:
@@ -746,8 +802,8 @@ observed by us directly — the URL and the 10 IP figure come from the docs page
 Remaining dependencies, none of them blocking:
 
 - **BUILD 3 is complete**; the verifier re-checks the evidence independently on every push.
-  What is not yet done is the shared adapter (BUILD 4) and every surface a judge can click
-  (BUILD 5+).
+  **BUILD 4 is complete**; the UI will consume the same gate rule and the same failure
+  classifier as the harness. Every surface a judge can click is still BUILD 5+.
 - The Story-API endpoint risk (§7) is confirmed open but characterised: **availability, not
   confidentiality**. It does not block BUILD 2–8 and must be resolved before BUILD 9.
 

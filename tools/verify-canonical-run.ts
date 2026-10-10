@@ -806,12 +806,22 @@ async function verify(runId: string, live: boolean): Promise<void> {
  * Deliberately NOT a verdict of its own: the file records what this run of the verifier found,
  * with the mode it ran in, so a reader can tell an offline report from a live one and can see
  * which claims were left unproven rather than having them quietly dropped.
+ *
+ * `verification-report.json` is the live run's record and is committed. `verification-report.offline.json`
+ * is written by the free re-run and is gitignored, because CI produces one on every push and a
+ * file that changes on every push is noise, not evidence.
  */
 function writeReport(runId: string, live: boolean, exitCode: number): string | null {
   const dir = runDir(runId);
   if (!existsSync(dir)) return null;
 
-  const path = join(dir, "verification-report.json");
+  // The filename carries the mode, and that is not cosmetic. This file is committed evidence, and
+  // the committed report for this run is the LIVE one — 41 verified / 1 unproven, where the
+  // strongest claim was actually re-performed. An offline re-run (which is free, and which CI does
+  // on every push) must not silently overwrite that with a weaker record. Caught by noticing the
+  // diff after a routine offline run; the live record was restored from git and the clobber was
+  // fixed here rather than being remembered as a rule to follow.
+  const path = join(dir, live ? "verification-report.json" : "verification-report.offline.json");
   const payload = {
     verifier: "tools/verify-canonical-run.ts",
     mode: live ? "live" : "offline",

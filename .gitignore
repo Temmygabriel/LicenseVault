@@ -53,5 +53,9 @@ seed*
 *.tgz
 scratch/
 
+# the free verifier re-run's own output — produced on every CI push, so it is noise in a diff.
+# The LIVE report (evidence/*/verification-report.json) IS committed; see tools/verify-canonical-run.ts.
+verification-report.offline.json
+
 # local editor/agent settings
 .claude/
