@@ -1,206 +1,183 @@
+import Link from "next/link";
+
+import { AccessDocket } from "@/components/AccessDocket";
+import { ProofReceipt } from "@/components/ProofReceipt";
+import { VaultMark } from "@/components/ProtectedAsset";
+import { INITIAL_ACCESS_STATE } from "@/lib/access/state";
+import { loadProofReceipt } from "@/lib/evidence/receipt";
 import {
   AENEID_CHAIN_ID,
-  AENEID_RPC_URL,
-  CDR_ADDRESS,
-  LICENSE_READ_CONDITION_ADDRESS,
   PROTECTED_ASSET_NAME,
   REQUIRED_LICENSE_LABEL,
 } from "@/lib/protocol/constants";
+import styles from "./page.module.css";
 
 /**
  * Landing surface.
  *
- * DELIBERATELY NOT THE FINISHED PRODUCT UI.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WHAT IS REAL ON THIS PAGE, AND WHAT IS NOT
  *
- * Build-spec §0 and §35 are explicit: the polished frontend must not be built before the
- * real protocol spike passes. BUILD 2 (the smallest real protected vault on Aeneid, with a
- * proven rejected-then-allowed read) has not run yet.
+ * Real: the Proof Receipt. Every row is read from the canonical run's committed artifacts by
+ * `lib/evidence/receipt.ts`, and every transaction hash in it was re-checked against Aeneid by
+ * the independent verifier before it was published.
  *
- * So this page shows the Access Docket structure and the VERIFIED protocol facts, and the
- * primary action is DISABLED with the real reason stated. It does not simulate an access
- * decision, because there is no access decision to show yet.
+ * Not yet wired: the access flow itself. This build has no wallet connector, so the page cannot
+ * learn which address is asking — and a docket that answered without asking the chain would be
+ * inventing a verdict, which is the one thing this product exists not to do. The button is
+ * therefore `disabled`, and the reason is printed under it rather than left for the reader to
+ * infer from a dead control.
  *
- * When BUILD 2 passes, this surface is wired to the real state machine in
- * `lib/access/state.ts` and the action becomes live.
+ * The state machine below the surface is real (`lib/access/state.ts`) and the protocol adapter
+ * is real (`lib/protocol/*`); what is missing is the connection between a visitor's wallet and
+ * those two. That is the next build, and it is stated as missing here so nobody has to guess.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 export default function Home() {
+  const receipt = loadProofReceipt();
+  const networkLabel = `Story Aeneid · Chain ${AENEID_CHAIN_ID}`;
+
   return (
-    <main
-      style={{
-        maxWidth: 1120,
-        margin: "0 auto",
-        padding: "var(--space-16) var(--space-6) var(--space-24)",
-      }}
-    >
-      <header style={{ marginBottom: "var(--space-12)" }}>
-        <p
-          className="label"
-          style={{ margin: 0, letterSpacing: "0.18em", color: "var(--ink)" }}
-        >
-          LicenseVault
-        </p>
+    <div className={styles.page}>
+      <header className={styles.header}>
+        <div className={styles.headerInner}>
+          <Link className={styles.brand} href="/">
+            <VaultMark className={styles.brandMark} />
+            <span className={styles.brandName}>LicenseVault</span>
+          </Link>
+
+          <nav className={styles.headerNav} aria-label="Sections">
+            <a className={styles.headerLink} href="#how-it-works">
+              How it works
+            </a>
+            <a className={styles.headerLink} href="#proof">
+              Proof
+            </a>
+            {/* Deliberately not a button. There is no wallet connector in this build, and a
+                control that looked clickable would misrepresent what the page can do. */}
+            <span className={styles.wallet}>
+              <span className={styles.walletDot} aria-hidden="true" />
+              <span className={styles.walletLong}>Wallet </span>not connected
+            </span>
+          </nav>
+        </div>
       </header>
 
-      <div
-        style={{
-          display: "grid",
-          gap: "var(--space-12)",
-          gridTemplateColumns: "minmax(0, 1fr)",
-          alignItems: "start",
-        }}
-      >
-        {/* ── Product proposition ─────────────────────────────────────────── */}
-        <section>
-          <h1
-            className="display"
-            style={{
-              fontSize: "clamp(2.25rem, 6vw, 3.75rem)",
-              margin: "0 0 var(--space-6)",
-              maxWidth: "16ch",
-            }}
-          >
-            A license should open the door.
-          </h1>
+      <main className={styles.main}>
+        <div className={styles.hero}>
+          <section className={styles.proposition}>
+            <p className={`label ${styles.eyebrow}`}>Onchain rights. Real access.</p>
 
-          <p
-            style={{
-              fontSize: "1.125rem",
-              color: "var(--text-secondary)",
-              maxWidth: "52ch",
-              margin: "0 0 var(--space-8)",
-            }}
-          >
-            LicenseVault turns an onchain IP license into a real access permission for
-            protected digital content.
-          </p>
+            <h1 className={`display ${styles.headline}`}>A license should open the door.</h1>
 
-          <p
-            className="label"
-            style={{ margin: 0, color: "var(--text-secondary)" }}
-          >
-            Built with Story
-          </p>
-        </section>
-
-        {/* ── Access Docket — the primary product object ──────────────────── */}
-        <section aria-labelledby="docket-heading">
-          <article className="docket">
-            <div className="docket__header">
-              <span className="docket__title" id="docket-heading">
-                Access Docket
-              </span>
-              <span className="docket__subtitle">Story Aeneid</span>
-            </div>
-
-            <div className="docket__row">
-              <span className="label">Protected Asset</span>
-              <span className="docket__value">{PROTECTED_ASSET_NAME}</span>
-            </div>
-
-            <div className="docket__row">
-              <span className="label">License Required</span>
-              <span className="docket__value">{REQUIRED_LICENSE_LABEL}</span>
-            </div>
-
-            <div className="docket__row">
-              <span className="label">License Holder</span>
-              <span className="docket__value mono" style={{ color: "var(--text-secondary)" }}>
-                Wallet not connected
-              </span>
-            </div>
-
-            <div className="docket__row">
-              <span className="label">Access</span>
-              <span
-                className="docket__status docket__status--restricted"
-                role="status"
-              >
-                Restricted
-              </span>
-            </div>
-
-            <div className="docket__row" style={{ borderBottom: "none" }}>
-              <span className="label">Network</span>
-              <span className="docket__value mono">
-                {AENEID_CHAIN_ID} · {AENEID_RPC_URL}
-              </span>
-            </div>
-          </article>
-
-          <div className="docket__action" style={{ padding: "var(--space-6) 0" }}>
-            <button type="button" className="action" disabled aria-describedby="why-disabled">
-              Check Access
-            </button>
-            <p
-              id="why-disabled"
-              style={{
-                marginTop: "var(--space-4)",
-                marginBottom: 0,
-                fontSize: "0.875rem",
-                color: "var(--text-secondary)",
-                maxWidth: "54ch",
-              }}
-            >
-              Verification is not wired yet. The protected vault has not been created on
-              Aeneid, so there is no real access decision to report. This action stays
-              disabled until the protocol harness proves a rejected read and then an
-              allowed read against the live chain.
+            <p className={styles.supporting}>
+              LicenseVault connects an onchain IP license to real access permission for protected
+              content. The content stays sealed until the read is allowed.
             </p>
-          </div>
+
+            <a className={styles.propositionLink} href="#how-it-works">
+              How it works
+            </a>
+            <p className={styles.propositionHint}>
+              The protocol condition decides access — not a flag in this page.
+            </p>
+          </section>
+
+          <AccessDocket
+            state={INITIAL_ACCESS_STATE}
+            walletLabel={null}
+            assetName={PROTECTED_ASSET_NAME}
+            assetSublabel="Fictional demonstration resource"
+            licenseRequired={REQUIRED_LICENSE_LABEL}
+            networkLabel={networkLabel}
+            networkBadge="Aeneid · Testnet"
+            action={{
+              label: "Check Access",
+              reason:
+                "Not wired to a wallet yet. This build has no wallet connector, so the docket " +
+                "cannot know which address is asking — and it will not answer a question it " +
+                "never asked the chain. The protocol flow underneath is real and has already " +
+                "run end to end on Aeneid; that run is in the proof receipt below.",
+            }}
+          />
+        </div>
+
+        <section className={styles.how} id="how-it-works" aria-labelledby="how-heading">
+          <h2 className={`label ${styles.sectionHeading}`} id="how-heading">
+            How it works
+          </h2>
+
+          <ol className={styles.howSteps}>
+            <li className={styles.howStep}>
+              <span className={styles.howStepIndex} aria-hidden="true">
+                01
+              </span>
+              <h3 className={styles.howStepTitle}>License</h3>
+              <p className={styles.howStepText}>
+                A creator registers an IP asset on Story and attaches commercial terms. That
+                attachment is the right being granted — not a promise made on a website.
+              </p>
+            </li>
+
+            <li className={styles.howStep}>
+              <span className={styles.howStepIndex} aria-hidden="true">
+                02
+              </span>
+              <h3 className={styles.howStepTitle}>Verify</h3>
+              <p className={styles.howStepText}>
+                The content is sealed with a key held inside a CDR vault, and the vault&apos;s read
+                condition carries the terms. The condition asks the license contract who owns the
+                token — so the chain answers, not this page.
+              </p>
+            </li>
+
+            <li className={styles.howStep}>
+              <span className={styles.howStepIndex} aria-hidden="true">
+                03
+              </span>
+              <h3 className={styles.howStepTitle}>Protected read</h3>
+              <p className={styles.howStepText}>
+                Only a wallet holding the license can perform the read, and only then is the key
+                released and the content decrypted. Without the license the read is refused and
+                the bytes stay sealed.
+              </p>
+            </li>
+          </ol>
+
+          <p className={styles.howNote}>
+            The gate is the protocol condition, not a toggle in this interface. A malformed
+            request and a missing license produce different answers, and this interface is built
+            to keep them different: a refusal is reported as a refusal only when the chain
+            actually refused.
+          </p>
         </section>
-      </div>
 
-      {/* ── Verified protocol facts, shown as facts ────────────────────────── */}
-      <section aria-labelledby="facts-heading" style={{ marginTop: "var(--space-24)" }}>
-        <h2
-          className="label"
-          id="facts-heading"
-          style={{ marginBottom: "var(--space-4)", color: "var(--ink)" }}
-        >
-          Verified Protocol Facts
-        </h2>
-        <p
-          style={{
-            color: "var(--text-secondary)",
-            maxWidth: "60ch",
-            marginTop: 0,
-            marginBottom: "var(--space-6)",
-          }}
-        >
-          Read from live Aeneid chain state and the published SDK on 2026-10-05. The full
-          evidence is in <span className="mono">docs/PROTOCOL_DISCOVERY.md</span>.
-        </p>
+        <div id="proof">
+          {receipt !== null ? (
+            <ProofReceipt receipt={receipt} />
+          ) : (
+            <section className="receipt" aria-labelledby="proof-missing">
+              <h2 className="label receipt__heading" id="proof-missing">
+                Proof receipt
+              </h2>
+              <p className="receipt__subhead">
+                The canonical run is not present in this checkout, so there is nothing to show
+                here. Nothing is substituted for it.
+              </p>
+            </section>
+          )}
+        </div>
+      </main>
 
-        <dl
-          style={{
-            display: "grid",
-            gap: "var(--space-3)",
-            margin: 0,
-            borderTop: "var(--border) solid var(--border-subtle)",
-            paddingTop: "var(--space-4)",
-          }}
-        >
-          {[
-            ["CDR contract", CDR_ADDRESS],
-            ["LicenseReadCondition", LICENSE_READ_CONDITION_ADDRESS],
-          ].map(([label, value]) => (
-            <div
-              key={label}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(0, 200px) minmax(0, 1fr)",
-                gap: "var(--space-6)",
-                alignItems: "baseline",
-              }}
-            >
-              <dt className="label">{label}</dt>
-              <dd className="mono" style={{ margin: 0, wordBreak: "break-all" }}>
-                {value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-    </main>
+      <footer className={styles.footer}>
+        <div className={styles.footerInner}>
+          <p className={styles.footerNote}>
+            A demonstration build on Story Aeneid testnet. The protected asset is fictional; the
+            run recorded above is real.
+          </p>
+          <p className={styles.footerContext}>{networkLabel}</p>
+        </div>
+      </footer>
+    </div>
   );
 }

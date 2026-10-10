@@ -1,0 +1,304 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   LICENSEVAULT — landing page chrome
+
+   Scoped to `app/page.tsx`. This file arranges the page: header, hero, the two
+   supporting sections, footer. Component surfaces that other components also use
+   — the docket, the status chip, the receipt, the resource preview — live in
+   `globals.css`, because a CSS-Module class is hashed and components would not
+   find it by name.
+
+   No new palette: every colour below is a token from `globals.css`.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+
+.header {
+  border-bottom: var(--border) solid var(--border-subtle);
+}
+
+.headerInner {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 var(--space-6);
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.brandMark {
+  color: var(--ink);
+  flex: none;
+}
+
+.brandName {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+}
+
+.headerNav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin-left: auto;
+}
+
+/* Below 560px the header must stay 64–72px tall, so the two section links step aside: both
+   targets are one scroll away, and `How it works` is also linked from the proposition. A
+   header that wraps to three rows to keep a jump link is the worse trade. */
+@media (max-width: 559px) {
+  .headerLink {
+    display: none;
+  }
+
+  .headerInner {
+    gap: var(--space-3);
+  }
+
+  /* "Wallet" is the word that costs the wrap; the chip stays honest without it. */
+  .walletLong {
+    display: none;
+  }
+}
+
+.headerLink {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 2px;
+}
+
+.headerLink:hover {
+  color: var(--ink);
+  border-bottom-color: var(--border-strong);
+}
+
+/* A status, not a control: there is no connector behind this build. */
+.wallet {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  border: var(--border) solid var(--border-subtle);
+  border-radius: var(--radius-small);
+  padding: var(--space-2) var(--space-3);
+  white-space: nowrap;
+}
+
+.walletDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border-strong);
+  flex: none;
+}
+
+/* ── Main ────────────────────────────────────────────────────────────────── */
+
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: var(--space-12) var(--space-6) var(--space-24);
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-12);
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .hero {
+    /* ~42% proposition / ~58% docket, per the locked composition */
+    grid-template-columns: minmax(0, 42fr) minmax(0, 58fr);
+    gap: var(--space-16);
+  }
+}
+
+/* ── Proposition ─────────────────────────────────────────────────────────── */
+
+.proposition {
+  padding-top: var(--space-2);
+}
+
+.eyebrow {
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-6);
+}
+
+.headline {
+  /* 56–68px across the desktop range the lock names; 40px floor on phones. */
+  font-size: clamp(2.5rem, 5.5vw, 4.25rem);
+  margin: 0 0 var(--space-6);
+  max-width: 14ch;
+}
+
+.supporting {
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-8);
+  /* ~45 characters per line, per the lock */
+  max-width: 34ch;
+}
+
+.propositionLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+  border: var(--border) solid var(--border-strong);
+  border-radius: var(--radius-small);
+  padding: var(--space-3) var(--space-6);
+  margin-bottom: var(--space-3);
+}
+
+.propositionLink:hover {
+  border-color: var(--ink);
+}
+
+.propositionHint {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-12);
+}
+
+.propositionHint code {
+  font-family: var(--font-data), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  color: var(--ink);
+  background: rgba(28, 29, 27, 0.05);
+  padding: 1px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+/* ── Shared section heading ──────────────────────────────────────────────── */
+
+.sectionHeading {
+  color: var(--ink);
+  margin: 0 0 var(--space-6);
+}
+
+/* ── How it works ────────────────────────────────────────────────────────── */
+
+.how {
+  margin-top: var(--space-24);
+  padding-top: var(--space-8);
+  border-top: var(--border) solid var(--border-subtle);
+}
+
+.howSteps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-8);
+}
+
+@media (min-width: 768px) {
+  .howSteps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-12);
+  }
+}
+
+.howStep {
+  border-top: 2px solid var(--border-strong);
+  padding-top: var(--space-4);
+}
+
+.howStepIndex {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.5rem;
+  color: var(--border-strong);
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.howStepTitle {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 0 0 var(--space-2);
+}
+
+.howStepText {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 46ch;
+}
+
+.howNote {
+  margin: var(--space-8) 0 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--ink);
+  max-width: 62ch;
+  border-left: 2px solid var(--accent-copper);
+  padding-left: var(--space-4);
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+
+.footer {
+  border-top: var(--border) solid var(--border-subtle);
+}
+
+.footerInner {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: var(--space-6);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.footerNote {
+  margin: 0;
+  max-width: 62ch;
+}
+
+.footerContext {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}

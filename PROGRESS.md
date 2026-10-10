@@ -1,16 +1,113 @@
 # LICENSEVAULT — LIVE BUILD PROGRESS
 
 > **This file is the running state of the project. It is updated at every phase boundary.**
-> Last updated: 2026-10-10 — **BUILD 4 IS DONE. There is now exactly one implementation of the
-> protocol, and the harness is a caller of it.** The UI and the CLI no longer have two opinions
-> about what a refusal means. 40 / 0 / 3 offline and 41 / 0 / 1 live are unchanged by the lift —
-> the same verifier, the same evidence, the same verdict. 93 tests.
+> Last updated: 2026-10-11 — **BUILD 5 (first pass) IS BUILT AND MEASURED. There is now a page a
+> judge can look at, and its every claim about the run is read from the committed evidence rather
+> than typed into the markup.** Responsiveness is measured at six viewports, not assumed; no
+> horizontal overflow anywhere. The access action is deliberately `disabled` and says why.
+> BUILD 4 precedes it: one implementation of the protocol, the harness a caller of it. 93 tests.
 
 **Repo:** https://github.com/Temmygabriel/LicenseVault
 **Local:** `C:\Users\USER\Documents\HACKATHONS BUILDS\BLI_LEGALTECH_HACK\LICENSEVAULT`
 **Contracts read:** `LICENSEVAULT_BUILD_SPEC.md` (2005 lines) + `LICENSEVAULT_DEEPSEEK_MASTER_PROMPT.md` (1620 lines)
 
 ---
+
+## 🟢 BUILD 5 (first pass) — THE PRODUCT SURFACE (2026-10-11)
+
+**The problem this phase exists to solve:** everything built so far is a CLI harness writing JSON.
+A judge cannot click JSON. BUILD 5 puts a real page in front of the run without letting the page
+claim anything the run did not do — which is harder than it sounds, because the tempting version of
+this page is one that *says* `ACCESS GRANTED` because it looks better.
+
+### What is on the page, and where each fact comes from
+
+| Surface | File | What it renders | Where the facts come from |
+|---|---|---|---|
+| Landing page | `app/page.tsx` | Header, proposition, docket, three-step explainer, proof receipt, footer | Composed; every value passed in is imported, not typed |
+| Access Docket | `components/AccessDocket.tsx` | LICENSE REQUIRED / LICENSE HOLDER / ACCESS STATUS / NETWORK, plus the action | Props only — it holds no state and asks nothing itself |
+| Status copy | `components/LicenseStatus.tsx` | A label, a sentence and a tone for **every** `AccessPhase` | The state machine in `lib/access/state.ts` |
+| Proof Receipt | `components/ProofReceipt.tsx` | The run's real groups, six explorer links, the verifier's counts | `lib/evidence/receipt.ts` |
+| Receipt loader | `lib/evidence/receipt.ts` | Reads `evidence/licensevault-aeneid-001/*.json` | The committed artifacts themselves |
+| Brand mark, sealed-record art, favicon | `components/ProtectedAsset.tsx`, `app/icon.svg` | Original inline SVG | Drawn in-repo; provenance in `docs/ASSET_PROVENANCE.md` |
+
+The receipt is the load-bearing part. `loadProofReceipt()` reads the committed JSON and **returns
+`null` when the artifacts are absent** — it does not fall back to a default, a placeholder, or a
+remembered copy. `app/page.tsx` renders an explicit "not present in this checkout, nothing is
+substituted for it" panel for that case. The verified-in-the-HTML line —
+**"41 verified · 0 refuted · 1 not verifiable"** — is `verification-report.json`'s own counts, and
+the six links under *On-chain steps* are the six real transaction hashes already re-checked against
+Aeneid by the verifier in BUILD 3.
+
+### The one thing the page will not do
+
+**The `CHECK ACCESS` button is `disabled`, and the reason is printed under it.** This build has no
+wallet connector, so the page cannot learn which address is asking — and a docket that produced a
+verdict without asking the chain would be inventing it, which is the exact failure this product
+exists to avoid. The brief allows a disabled control *provided it explains itself honestly*; it
+does, in one sentence:
+
+> Not wired to a wallet yet. This build has no wallet connector, so the docket cannot know which
+> address is asking — and it will not answer a question it never asked the chain.
+
+`AccessDocket` **throws** if an unwired action arrives with no `reason`, so the honest explanation
+cannot be dropped in a later edit without the build failing.
+
+### Responsiveness — measured, not eyeballed
+
+A measuring instrument, not a screenshot review: **`tools/ui-audit.mjs`** (run as `npm run ui:audit`)
+drives Chrome over the DevTools Protocol from Node's built-in `WebSocket` — no new dependency — and
+**polls for a CSS-dependent condition** before reading anything. That last part matters: the first
+run of the script measured an unstyled document and produced a page of findings that were entirely
+artefacts of its own impatience. The instrument is **committed**, because a responsiveness number a
+judge cannot re-measure is a number on trust.
+
+| Viewport | Horizontal overflow | Header | `h1` | Docket width |
+|---|---|---|---|---|
+| desktop 1440×900 | **none** | 69px | 68px | 654px |
+| desktop 1280×800 | **none** | 69px | 68px | 654px |
+| desktop 1024×768 | **none** | 69px | 56.32px | 520px |
+| tablet 768×1024 | **none** | 69px | 42.24px | 680px |
+| mobile 390×844 | **none** | 69px | 40px | 342px |
+| mobile 320×844 | **none** | 87px | 40px | 272px |
+
+Secondary text on the canvas measures **4.79** contrast. Screenshots of four of those viewports are
+committed under `qa-screens/` at their exact pixel sizes.
+
+**Three defects this found, all fixed rather than noted:**
+1. **Horizontal overflow at 320px.** The network badge ("Story Aeneid · Chain 1315", `nowrap`) pushed
+   the document 13px wide. Fixed by letting the docket header wrap and adding a compact badge; the
+   compact form ("Aeneid · Testnet") is also what the UI lock specifies.
+2. **Headline below the locked 56px floor at 1024px** (55.296px). The clamp's middle term moved from
+   `5.4vw` to `5.5vw`, giving 56.32px.
+3. **Header 130px tall at 320px and 99px at 390px** — a wrapped header is a real defect on a phone,
+   not a cosmetic one. The two section links step aside below 560px (both targets are one scroll
+   away, and *How it works* is linked from the proposition too), and the wallet chip drops the word
+   "Wallet" rather than wrapping. Result: 69px at 390, 87px at 320.
+
+### A trap worth recording (it produced a whole misleading run)
+
+The audit reported a broken layout — full-width document, default `<h1>` size. The page was fine.
+**A stale `next start` was serving a rebuilt `.next`**: `pkill -f "next start"` does not work on
+Windows, so the old process survived with an in-memory manifest pointing at CSS chunks that had been
+deleted. Diagnosed with `netstat -ano | grep :4173`, killed with `taskkill //F //PID <pid>`. The
+lesson is in the audit script, not in a resolution to be careful: measure a CSS-dependent condition
+before believing a layout number.
+
+### Honest gaps, stated here so a judge does not have to discover them
+
+- **No wallet connector.** The access flow is not clickable. The state machine and the protocol
+  adapter beneath it are real and have run end to end on Aeneid; the connection between a visitor's
+  wallet and those two is the next build.
+- **The CDR keeper API is plain HTTP on a private-range IP** (`http://172.192.41.96:1317`). A
+  deployed server almost certainly cannot reach it, which means a *live* read from a deployed build
+  would surface as `INFRASTRUCTURE_FAILURE` — never as `NO_LICENSE`. That is the correct behaviour
+  (an unreachable dependency is not a verdict about the user) but it must be documented rather than
+  discovered. Tracked as the §7 risk; must be resolved before BUILD 9.
+
+---
+
+
 
 ## 🟢 BUILD 4 — ONE IMPLEMENTATION OF THE PROTOCOL (2026-10-10)
 
@@ -303,8 +400,8 @@ machine is 8 GB and the build step is deliberately not run here.
 | BUILD 2 | Minimal protocol spike | ✅ **PASS — executed end to end on live Aeneid 2026-10-07; ALL CHECKS PASSED** |
 | BUILD 3 | Evidence + verifier | ✅ **PASS — `tools/verify-canonical-run.ts`; 41 verified / 0 refuted / 1 unproven with `--live`, 2026-10-08** |
 | BUILD 4 | Protocol adapter | ✅ **PASS — `lib/protocol/{gate,access,clients}.ts`; harness rewired onto them; verifier verdict unchanged (40/0/3 offline), 93 tests, 2026-10-10** |
-| BUILD 5 | Product UI (four surfaces) | ⬜ NOT STARTED |
-| BUILD 6 | Visual system | ⬜ NOT STARTED |
+| BUILD 5 | Product UI (four surfaces) | ⏳ **IN PROGRESS — first pass built and measured 2026-10-11.** Landing page, docket, status copy and Proof Receipt all live; responsive at six viewports with no overflow. **Not yet clickable**: no wallet connector, so `CHECK ACCESS` is disabled with a stated reason. |
+| BUILD 6 | Visual system | ⏳ partially delivered inside BUILD 5 (locked palette, fonts, hierarchy, original marks, measured contrast); the 12-category visual-QA scoring pass has **not** been run |
 | BUILD 7 | Security / adversarial | ⬜ NOT STARTED |
 | BUILD 8 | Deployment (Vercel) | ⬜ NOT STARTED |
 | BUILD 9 | Submission | ⬜ NOT STARTED |
@@ -345,7 +442,7 @@ reachability); none of them is required for BUILD 2.
 cdr-sdk `main` but absent from the published 0.2.2 package. Recorded and resolved in
 `docs/PROTOCOL_DECISION.md` rather than silently worked around.
 
-### Test suite — what it actually proves (66 tests, 4 files)
+### Test suite — what it actually proves (93 tests, 6 files)
 
 | File | Tests | Proves |
 |---|---|---|
@@ -353,6 +450,8 @@ cdr-sdk `main` but absent from the published 0.2.2 package. Recorded and resolve
 | `tests/state.test.ts` | 18 | The access state machine cannot be talked into `UNLOCKED`; only an authorization refusal reaches `NO_LICENSE`; timeouts and unknown errors never do |
 | `tests/constants.test.ts` | 26 | Every protocol address is a valid EIP-55 address; the docs' invalid CDR checksum is pinned; the live-read license token metadata and the 1024-byte vault cap are recorded as assertions, not comments; **the PIL royalty policy and currency can never be re-zeroed**, and the faucet can never silently revert to the mainnet-gated QuickNode route |
 | `tests/content.test.ts` | 9 | Protected content round-trips byte for byte, and a **wrong key, a tampered ciphertext, or a truncated blob all THROW** rather than returning bytes |
+| `tests/gate.test.ts` | 15 | The revert-is-not-a-denial rule, built from the **real viem messages captured on live Aeneid**: an unrecognised revert selector is `UNKNOWN` and never `DENIED` |
+| `tests/access.test.ts` | 12 | A malformed request classifies as `INFRASTRUCTURE_FAILURE` and **never** as `AUTHORIZATION_FAILURE` — asserted on its own labelled line, because it is the most consequential classifier in the project |
 
 Three properties are worth calling out because they are structural, not stylistic:
 
@@ -746,10 +845,12 @@ and avoids depending on unreleased `main`-branch code.
    the on-chain vault record) and `lib/protocol/clients.ts` (client construction). The harness now
    imports all three and keeps none of its own copies. 93 tests; the verifier's verdict is
    unchanged, which is the point.
-9. **BUILD 5 — the product UI.** Before writing any of it, read the preflight pack at
-   `..\LicenseVault_UI_Preflight_Pack\LicenseVault_UI_Preflight_Pack` — it was prepared for exactly
-   this phase and has not been consulted yet. Do not open the image files in it (the vision path
-   errors out); read the text files.
+9. ⏳ **BUILD 5 — the product UI.** First pass is built and measured (see the BUILD 5 section):
+   the landing page, the state-typed Access Docket, the Proof Receipt read from the committed run,
+   original marks, and a measured responsive result across six viewports. **What remains:** wire a
+   visitor's wallet to `lib/protocol/*` so `CHECK ACCESS` stops being disabled, run the brief's
+   12-category visual-QA scoring pass (≥20/24), and capture the remaining state screenshots
+   (no-license / unlocked / error / proof).
 10. **BUILD 8 — Vercel.** User has offered to issue a token so deployment can be driven the same
     way GitHub is. Not needed until the UI exists; raise it when BUILD 5 lands.
 
@@ -762,13 +863,15 @@ and avoids depending on unreleased `main`-branch code.
   11062, licence token 73227, an authorized read that returned a key, a refused read from an
   unlicensed wallet, and content decrypted byte for byte. The mechanism **is** demonstrated end
   to end at the protocol level.
-- What is still not built: **every user-facing surface** (BUILD 5+). The demonstration above is a
-  CLI harness writing JSON — a judge cannot click it yet. BUILD 3 re-checks that JSON from the
-  chain, and BUILD 4 means the UI that gets built next will consume the *same* gate rule and the
-  *same* failure classifier rather than re-deriving them.
-- The interface (`app/page.tsx`) is a single deliberate non-final surface: it renders the
-  Access Docket in `RESTRICTED` with a **disabled** "Check Access" button. It does not
-  pretend to verify anything.
+- What is still not built: **the clickable access flow.** The demonstration above is still driven by
+  a CLI harness writing JSON — BUILD 5 puts a real page in front of that run (its Proof Receipt is
+  read from the committed artifacts, not typed in), but the page cannot yet ask a wallet to perform
+  a read, so `CHECK ACCESS` is `disabled` and says why. BUILD 3 re-checks the JSON from the chain,
+  and BUILD 4 means the UI flow, when it is wired, will consume the *same* gate rule and the *same*
+  failure classifier rather than re-deriving them.
+- The interface (`app/page.tsx`) renders the Access Docket in `LOCKED` — the state before any
+  question has been asked. It does not pretend to verify anything, and it cannot reach `UNLOCKED`
+  without a real read.
 - `docs/UX_TEST.md` has been written but **the test has not been run** — no human has been
   tested. The results table is deliberately blank.
 
@@ -776,7 +879,7 @@ and avoids depending on unreleased `main`-branch code.
 
 ## BLOCKERS
 
-**None. BUILD 2, BUILD 3 and BUILD 4 are unblocked and complete.**
+**None. BUILD 2, BUILD 3, BUILD 4 are complete; BUILD 5's first pass is built and measured.**
 
 The wallets were funded on 2026-10-07 and the run executed. Both went from `0x0` to exactly
 `1 IP`, so the balance is provably the faucet drip:

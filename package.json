@@ -16,7 +16,9 @@
     "test:watch": "vitest",
     "spike:check": "tsx tools/spike/check-network.ts",
     "verify:run": "tsx tools/verify-canonical-run.ts",
-    "spike:vault": "tsx tools/spike/build-vault.ts"
+    "spike:vault": "tsx tools/spike/build-vault.ts",
+    "ui:audit": "node tools/ui-audit.mjs",
+    "ui:overflow": "node tools/overflow-probe.mjs"
   },
   "dependencies": {
     "@piplabs/cdr-contracts": "0.2.2",
