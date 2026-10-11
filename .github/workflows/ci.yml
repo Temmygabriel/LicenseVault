@@ -138,8 +138,28 @@ jobs:
           fi
 
           # Never allow a NEXT_PUBLIC_ private key (build-spec §9.11).
-          if git grep -nEI 'NEXT_PUBLIC_[A-Z_]*PRIVATE_KEY' -- . \
-              "${SPEC_DOCS[@]}" > /tmp/pub.txt; then
+          #
+          # This check fired on `PROGRESS.md` on 2026-10-12, and like the 64-hex finding above it
+          # was WRONG in an instructive way: the matching line was the project's own note saying
+          # "never `NEXT_PUBLIC_PRIVATE_KEY`". A control that cannot tell a rule from a violation
+          # of it punishes writing the rule down, and the fix for that is never to write it down
+          # less.
+          #
+          # It is matched by USE, not by MENTION. The thing being forbidden is a key the browser
+          # can reach, and that only happens two ways: reading it (process.env.NEXT_PUBLIC_...) or
+          # assigning it a value (`=` in .env / `:` in a workflow env block). Prose that names the
+          # pattern — this comment included — does neither, so it passes. That is the same
+          # distinction as the ABI case above: a property of the text, not a list of files we have
+          # decided to trust.
+          #
+          # The trailing `[^[:space:]]` is load-bearing: it requires an actual value, so a colon
+          # used as prose punctuation does not read as an assignment.
+          #
+          # Note this is also stricter than what it replaced in one direction: it now scans .md
+          # files too, because a doc that ASSIGNS the variable is a real problem, not a mention.
+          if git grep -nEI \
+              'process\.env\.NEXT_PUBLIC_[A-Z_]*PRIVATE_KEY|NEXT_PUBLIC_[A-Z_]*PRIVATE_KEY[[:space:]]*[:=][[:space:]]*[^[:space:]]' \
+              -- . "${SPEC_DOCS[@]}" > /tmp/pub.txt; then
             echo "::error::A private key must never use the NEXT_PUBLIC_ prefix:"
             cat /tmp/pub.txt
             exit 1
