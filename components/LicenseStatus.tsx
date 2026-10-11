@@ -98,11 +98,22 @@ export interface LicenseStatusProps {
   compact?: boolean;
 }
 
+/**
+ * The status is a live region, because the change it reports happens without a navigation.
+ *
+ * The brief (§7) asks for `role="status"`/`aria-live` on important state changes, and this is the
+ * most important one on the page: a sighted visitor sees LOCKED become LICENSE VERIFIED, while a
+ * screen-reader user was told nothing at all. The one permitted action here is asynchronous, so
+ * there is no other moment at which assistive technology would notice the answer arrived.
+ *
+ * `role="status"` is an implicit `aria-live="polite"` region that is announced once it settles,
+ * which is the right politeness: this is a result, not an interruption.
+ */
 export function LicenseStatus({ phase, compact = false }: LicenseStatusProps) {
   const copy = statusCopy(phase);
 
   return (
-    <span className={`status status--${copy.tone}`}>
+    <span className={`status status--${copy.tone}`} role="status">
       <span className="status__mark" aria-hidden="true" />
       <span className={compact ? "status__label status__label--compact" : "status__label"}>
         {copy.label}

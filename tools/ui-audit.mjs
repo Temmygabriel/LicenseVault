@@ -75,9 +75,52 @@ const PROBE = String.raw`(() => {
   const header = q("header");
   const main = q("main");
   const hero = main ? main.firstElementChild : null;
+
+  /**
+   * The two-column composition, measured rather than read off the stylesheet.
+   *
+   * The brief (§4) asks for roughly 42% proposition / 58% Access Docket with a 48–64px gap at
+   * 1440px. gridTemplateColumns reports the used track sizes as resolved pixels, which is what a
+   * reader actually sees — the fr units in the source are not.
+   */
+  const heroGrid = hero ? getComputedStyle(hero) : null;
+  const tracks = heroGrid
+    ? heroGrid.gridTemplateColumns.split(" ").filter((t) => t.endsWith("px"))
+    : [];
+  const trackPx = tracks.map((t) => Math.round(parseFloat(t)));
+  const columnGap = heroGrid ? Math.round(parseFloat(heroGrid.columnGap) || 0) : 0;
+  const total = trackPx.reduce((a, b) => a + b, 0);
+
+  /**
+   * The supporting sentence's rendered line length.
+   *
+   * The brief (§4) asks for no more than about 45 characters per line. Counting real line boxes
+   * with Range.getClientRects() is the measurement; an earlier version of this probe divided the
+   * element width by an assumed 0.5em average glyph width, which is a guess dressed as a number —
+   * and it was pointed at the wrong element besides, so it reported the 11px eyebrow.
+   *
+   * The element is found positionally (the paragraph after the h1) because CSS Modules hash the
+   * class name, and a measurement tool must not depend on a hash.
+   */
   const headline = q("h1");
   const eyebrow = q("main p");
   const docket = q("article");
+
+  // Must come after headline is declared — reading a const before its declaration throws, and an
+  // earlier draft of this probe did exactly that and reported six empty viewports as if it had
+  // measured them. NOTE: no backticks anywhere in this comment. PROBE is a template literal, so a
+  // backtick inside it terminates the string and the whole script fails to parse.
+  const support = headline ? headline.nextElementSibling : null;
+  const supportStyle = support ? getComputedStyle(support) : null;
+  const lineCount = (() => {
+    if (!support || !support.firstChild) return null;
+    const range = document.createRange();
+    range.selectNodeContents(support);
+    return range.getClientRects().length;
+  })();
+  const supportCharsPerLine =
+    lineCount && support ? Math.round(support.textContent.trim().length / lineCount) : null;
+
   const statusLabel = q(".status__label");
   // The docket's primary action, not merely the first button on the page — the verification
   // form sits above it and has buttons of its own.
@@ -122,6 +165,22 @@ const PROBE = String.raw`(() => {
     main: box(main),
     mainMaxWidth: cs(main, "max-width"),
     hero: box(hero),
+    heroColumns: {
+      tracks: trackPx,
+      gap: columnGap,
+      share: total > 0 ? trackPx.map((t) => Math.round((t / total) * 100)) : [],
+    },
+    support: support
+      ? {
+          box: box(support),
+          text: support.textContent.trim(),
+          size: supportStyle.fontSize,
+          lineHeight: supportStyle.lineHeight,
+          maxWidth: supportStyle.maxWidth,
+          lines: lineCount,
+          charsPerLine: supportCharsPerLine,
+        }
+      : null,
     headline: { text: headline ? headline.textContent.trim() : null, box: box(headline), size: cs(headline, "font-size"), family: cs(headline, "font-family"), lineHeight: cs(headline, "line-height") },
     eyebrow: eyebrow ? eyebrow.textContent.trim() : null,
     docket: { box: box(docket), bg: cs(docket, "background-color") },
@@ -209,11 +268,24 @@ for (const vp of VIEWPORTS) {
   const ready = await settle();
   if (!ready) throw new Error(`${vp.name}: the page never reached a styled layout`);
 
-  const { result } = await cdp.send("Runtime.evaluate", {
+  const { result, exceptionDetails } = await cdp.send("Runtime.evaluate", {
     expression: PROBE,
     returnByValue: true,
     awaitPromise: false,
   });
+
+  // A probe that throws returns `undefined`, and spreading `undefined` yields a row containing
+  // nothing but the viewport name — which reads exactly like "measured, and there was nothing
+  // there". An earlier draft of this script did that and reported six empty viewports as though
+  // it had succeeded. Fail instead.
+  if (exceptionDetails) {
+    throw new Error(
+      `${vp.name}: the probe threw — ${exceptionDetails.exception?.description ?? exceptionDetails.text}`,
+    );
+  }
+  if (result.value === undefined || result.value === null) {
+    throw new Error(`${vp.name}: the probe returned nothing`);
+  }
 
   results.push({ name: vp.name, ...result.value });
 }
