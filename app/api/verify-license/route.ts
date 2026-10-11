@@ -26,12 +26,28 @@
 import { NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
-import { CANONICAL_VAULT } from "@/lib/protocol/canonical-vault";import { EXPECTED_CHAIN_ID, createAeneidPublicClient } from "@/lib/protocol/clients";
+import { CANONICAL_VAULT } from "@/lib/protocol/canonical-vault";
+import { EXPECTED_CHAIN_ID, createAeneidPublicClient } from "@/lib/protocol/clients";
 import { encodeLicenseAccessAuxData } from "@/lib/protocol/conditions";
 import { probeReadCondition } from "@/lib/protocol/gate";
+import { redactInfrastructureDetail } from "@/lib/access/redact";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/**
+ * A JSON response with the two headers a per-caller verdict needs.
+ *
+ * `no-store` is not boilerplate here. The body is a statement about one address, and a cached copy
+ * served to a different address would be a verdict about the wrong wallet — the exact failure this
+ * product exists to prevent, arriving by way of an intermediary rather than a bug.
+ */
+function respond(body: unknown, status: number): NextResponse {
+  return NextResponse.json(body, {
+    status,
+    headers: { "cache-control": "no-store, max-age=0" },
+  });
+}
 
 /** The budget of a single probe, so a stalled RPC surfaces as an error instead of a hang. */
 const PROBE_TIMEOUT_MS = 8_000;
@@ -60,21 +76,47 @@ function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// A small per-address limiter.
+// A small per-client limiter.
 //
 // This endpoint makes an outbound RPC call on every request, which makes it a way to spend
 // somebody else's rate limit. The call itself cannot be redirected — the contract address is
 // fixed in `canonical-vault.ts` and the caller supplies only a wallet address — so this is
-// about availability, not about reach. In-memory on purpose: it is a courtesy brake, and a
-// real one belongs at the edge (tracked for BUILD 7).
+// about availability, not about reach.
+//
+// ⚠️ THIS IS NOT A SECURITY BOUNDARY, AND MUST NOT BE DESCRIBED AS ONE (BUILD 7).
+//
+// The per-client key comes from `x-forwarded-for`, which a caller can set to anything when the
+// app is not behind a proxy that overwrites it. Vary the header and the per-client budget is
+// bypassed entirely. That is tolerable only because nothing is being protected by it — the
+// product's authorization decision is made by the chain, not by this counter — and because the
+// process-wide cap below still bounds the total outbound calls regardless of what any caller
+// claims about itself. A real per-client limit belongs at the edge; see `docs/SECURITY.md`.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const WINDOW_MS = 60_000;
 const MAX_PER_WINDOW = 12;
+
+/**
+ * A ceiling on the whole process, not on one claimed client.
+ *
+ * This is the part spoofing cannot get around: however many `x-forwarded-for` values a caller
+ * invents, the instance will not exceed this many outbound probes per window. It exists so that
+ * the honest-looking per-client brake cannot be turned into an unbounded one by lying.
+ */
+const MAX_GLOBAL_PER_WINDOW = 240;
+
+/** Header values are attacker-controlled, so the map key is bounded rather than trusted. */
+const MAX_KEY_LENGTH = 64;
+
 const attempts = new Map<string, number[]>();
+const globalAttempts: number[] = [];
+
+function prune(times: number[], now: number): number[] {
+  return times.filter((at) => now - at < WINDOW_MS);
+}
 
 function withinBudget(key: string, now: number): boolean {
-  const recent = (attempts.get(key) ?? []).filter((at) => now - at < WINDOW_MS);
+  const recent = prune(attempts.get(key) ?? [], now);
   if (recent.length >= MAX_PER_WINDOW) {
     attempts.set(key, recent);
     return false;
@@ -90,13 +132,23 @@ function withinBudget(key: string, now: number): boolean {
   return true;
 }
 
+function withinGlobalBudget(now: number): boolean {
+  const recent = prune(globalAttempts, now);
+  if (recent.length >= MAX_GLOBAL_PER_WINDOW) return false;
+  recent.push(now);
+  globalAttempts.length = 0;
+  globalAttempts.push(...recent);
+  return true;
+}
+
 /** `Request` has no `ip`; the header the platform sets is the only signal available. */
 function clientKey(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded !== null && forwarded.length > 0) {
-    return forwarded.split(",")[0]?.trim() ?? "unknown";
-  }
-  return request.headers.get("x-real-ip") ?? "unknown";
+  const raw =
+    forwarded !== null && forwarded.length > 0
+      ? (forwarded.split(",")[0]?.trim() ?? "unknown")
+      : (request.headers.get("x-real-ip") ?? "unknown");
+  return raw.slice(0, MAX_KEY_LENGTH);
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -104,7 +156,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Expected a JSON body." }, { status: 400 });
+    return respond({ error: "Expected a JSON body." }, 400);
   }
 
   const addressInput =
@@ -113,26 +165,27 @@ export async function POST(request: Request): Promise<NextResponse> {
       : undefined;
 
   if (typeof addressInput !== "string" || !isAddress(addressInput)) {
-    return NextResponse.json(
+    return respond(
       {
         error:
           "That is not a valid EVM address. Nothing was asked of the chain, so nothing was " +
           "decided — this is a rejected input, not a licensing answer.",
       },
-      { status: 400 },
+      400,
     );
   }
 
   const wallet = getAddress(addressInput);
 
-  if (!withinBudget(clientKey(request), Date.now())) {
-    return NextResponse.json(
+  const now = Date.now();
+  if (!withinBudget(clientKey(request), now) || !withinGlobalBudget(now)) {
+    return respond(
       {
         error:
-          "Too many checks from this address in the last minute. The chain was not asked, so " +
-          "this is not a licensing answer — wait a moment and try again.",
+          "Too many checks in the last minute. The chain was not asked, so this is not a " +
+          "licensing answer — wait a moment and try again.",
       },
-      { status: 429 },
+      429,
     );
   }
 
@@ -146,13 +199,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     // the answer is attributable.
     const chainId = await publicClient.getChainId();
     if (chainId !== EXPECTED_CHAIN_ID) {
-      return NextResponse.json(
+      return respond(
         {
           error:
             `The RPC answered with chain ${chainId}, not Aeneid (${EXPECTED_CHAIN_ID}). ` +
             `No verdict was reached.`,
         },
-        { status: 502 },
+        502,
       );
     }
 
@@ -172,30 +225,37 @@ export async function POST(request: Request): Promise<NextResponse> {
     // it crosses as itself. The client turns it into a state-machine event with the same pure
     // mapper the tests exercise — `eventForVerdict` in `lib/access/verify.ts` — which keeps the
     // bigint evidence typed instead of round-tripping integers through JSON.
-    return NextResponse.json({
-      verdict,
-      checkedAt,
-      chainId,
-      vaultUuid: CANONICAL_VAULT.uuid,
-    });
+    return respond(
+      {
+        verdict,
+        checkedAt,
+        chainId,
+        vaultUuid: CANONICAL_VAULT.uuid,
+      },
+      200,
+    );
   } catch (caught) {
     // An unreachable RPC is not a statement about anyone's rights.
     const detail = caught instanceof Error ? caught.message : String(caught);
-    return NextResponse.json(
+
+    // The operator gets the whole message; the caller gets it with endpoints and long tokens
+    // removed. A viem error names the URL it failed to reach, and hosted RPC providers put the
+    // API key in that URL — so returning it verbatim would let any anonymous caller read the
+    // operator's RPC credential by making the RPC fail. See `lib/access/redact.ts`.
+    console.error("[verify-license] infrastructure failure:", detail);
+
+    return respond(
       {
         error:
           "The chain could not be reached, so no verdict was reached. This is an " +
-          `infrastructure failure, not a licensing decision. (${detail})`,
+          `infrastructure failure, not a licensing decision. (${redactInfrastructureDetail(detail)})`,
       },
-      { status: 502 },
+      502,
     );
   }
 }
 
 /** A GET on this route is a mistake worth naming rather than a 405 with no explanation. */
 export function GET(): NextResponse {
-  return NextResponse.json(
-    { error: "This route verifies by POST with { address }." },
-    { status: 405 },
-  );
+  return respond({ error: "This route verifies by POST with { address }." }, 405);
 }

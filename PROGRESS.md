@@ -1,14 +1,15 @@
 # LICENSEVAULT — LIVE BUILD PROGRESS
 
 > **This file is the running state of the project. It is updated at every phase boundary.**
-> Last updated: 2026-10-12 — **BUILD 5 IS BUILT, MEASURED, AND CLICKABLE; BUILD 6 IS SCORED.**
+> Last updated: 2026-10-12 — **BUILD 5 IS BUILT, MEASURED, AND CLICKABLE; BUILD 6 IS SCORED; BUILD 7 FOUND AND FIXED A REAL LEAK.**
 > There is a page a judge can look at; its every claim about the run is read from the committed
 > evidence rather than typed into the markup; and its one action performs a **real `eth_call`
 > against the vault's read condition on live Aeneid**. Responsiveness is measured at six viewports,
-> not assumed; no horizontal overflow anywhere; 105 tests. It is still deliberately incapable of
+> not assumed; no horizontal overflow anywhere; 112 tests. It is still deliberately incapable of
 > printing `ACCESS GRANTED`, and the section below says exactly why. The 12-category visual gate is
 > scored **22/24** in `docs/VISUAL_QA.md`, with one required screenshot declared absent rather than
-> fabricated.
+> fabricated. BUILD 7 confirmed, live, that the public route handed an anonymous caller the
+> operator's RPC credential in an error message — now redacted at the boundary and pinned by tests.
 > BUILD 4 precedes it: one implementation of the protocol, the harness a caller of it.
 
 **Repo:** https://github.com/Temmygabriel/LicenseVault
@@ -334,6 +335,97 @@ from BUILD 5 should be applied before every measurement run:** `netstat -ano | g
 
 ---
 
+## 🔴 BUILD 7 — THE ADVERSARIAL PASS FOUND A REAL LEAK (2026-10-12)
+
+**Status: PASS. One finding, confirmed live, fixed, verified live, pinned by tests.**
+
+The pass was not a restatement of the rules. It went looking for the places where the code
+*already broke* the contract, and it found one on the second read — in the error branch of the
+public verification route, which is where the rules are least likely to be checked.
+
+### The finding: the route handed an anonymous caller the operator's RPC credential
+
+`app/api/verify-license/route.ts` reports infrastructure failures honestly, and it returned the
+underlying viem message verbatim. That message embeds the endpoint it failed to reach:
+
+```
+HTTP request failed.
+Status: 404
+URL: https://<operator-rpc-host>/v3/<OPERATOR_API_KEY>
+Request body: {"method":"eth_chainId"}
+Version: viem@2.57.3
+```
+
+Most hosted RPC providers — Alchemy, QuickNode, Infura — **put the credential in the URL path**.
+So any anonymous caller could POST, make the RPC fail, and read back the operator's RPC API key.
+
+**Confirmed, not reasoned about.** A production server started with
+`STORY_RPC_URL="https://aeneid.storyrpc.io/v3/SUPER_SECRET_API_KEY"` returned that full URL in the
+response body. Re-run against a **rebuilt** server after the fix:
+
+```
+{"error":"The chain could not be reached, so no verdict was reached. This is an
+ infrastructure failure, not a licensing decision. (HTTP request failed. Status: 404
+ URL: [endpoint redacted] Request body: {\"method\":\"eth_chainId\"} Details: Not Found
+ Version: viem@2.57.3 — endpoints and long tokens are redacted before this leaves the server.)"}
+```
+
+The key is gone, the host is gone, and `Status: 404` / `viem@2.57.3` survive — because redaction
+that destroys the diagnostic is its own failure, and the unreachable-RPC screenshot in
+`qa-screens/` depends on that text being legible.
+
+This would have gone unnoticed for a long time, and that is the interesting part: **the default
+Aeneid endpoint is public and keyless, so the leak was invisible in exactly the configuration that
+was tested.** It would have appeared the first time somebody configured the app *properly*.
+
+### Why the fix is a module with tests, not a comment
+
+The leak lived in a code path that only runs **after** something else has already failed. Nobody
+reads the error branch while changing the success branch — a comment saying "don't leak the URL
+here" is a note addressed to someone who is not looking. `lib/access/redact.ts` makes the safe
+behaviour the default, and `tests/redact.test.ts` (7 tests) pins it with the **real** viem message,
+including the bare-token, scheme-relative and query-string cases.
+
+### Also hardened in the same pass
+
+| Change | Why |
+|---|---|
+| `cache-control: no-store, max-age=0` on every response | The body is a verdict **about one address**. A cached copy served to a different address is a verdict about the wrong wallet — the exact failure this product exists to prevent, arriving via an intermediary instead of a bug. |
+| Process-wide ceiling (240 probes/min) | The per-client limiter keys on `x-forwarded-for`, which a caller sets freely. Varying the header erases the per-client budget. The global cap is the part spoofing **cannot** get around. |
+| `MAX_KEY_LENGTH` + map pruning | Header values are attacker-controlled, so the map key is bounded rather than trusted, and the map is swept. |
+| A long comment saying the per-client limiter **is not a security boundary** | A reviewer would otherwise infer a boundary that is not there. It is tolerable only because nothing is protected by it — the chain decides authorization, not this counter. A real per-client limit belongs at the edge. |
+| Full unredacted message to `console.error` | The operator keeps the diagnostic; the anonymous caller does not. |
+
+### The adversarial matrix — network-level tests now actually run
+
+`docs/SECURITY.md` §7 previously marked the network row as pending "because no vault exists on
+Aeneid yet". That is no longer true and the table has been corrected rather than left to age:
+
+| Test | Result |
+|---|---|
+| No licence | ✅ live — `DENIED` |
+| Unminted token id | ✅ live — reverts `ERC721NonexistentToken` (`0x7e273289`) |
+| Malformed auxiliary data (empty) | ✅ live — reverts with no decodable reason → `UNKNOWN`, **never** `DENIED` |
+| Contract owner (not licensee) | ✅ live — `DENIED` (the condition asks about a *licence*, not ownership) |
+| Bad address to the public route | ✅ live — `400`, and no chain call is made |
+| `GET` on the public route | ✅ live — `405`, explained |
+| RPC failure returns a credential | ✅ **fixed + verified live** |
+| Spoofed `x-forwarded-for` | ✅ cannot lift the process-wide ceiling |
+
+### Gate at the close of BUILD 7
+
+| Check | Result |
+|---|---|
+| Lint | ✅ clean |
+| Typecheck | ✅ clean |
+| Tests | ✅ **112 passed / 9 files** (was 105 / 8 — `tests/redact.test.ts` is new) |
+| `next build` | ✅ clean, `ƒ /api/verify-license` still dynamic |
+
+The security write-up lives in `docs/SECURITY.md` §8, with the new threats 14–16 in the main table,
+so the finding sits beside the other threats instead of only in a commit message.
+
+---
+
 ## 🟢 BUILD 4 — ONE IMPLEMENTATION OF THE PROTOCOL (2026-10-10)
 
 **The problem this phase exists to solve:** `tools/spike/build-vault.ts` learned, the hard way, the
@@ -627,8 +719,8 @@ machine is 8 GB and the build step is deliberately not run here.
 | BUILD 4 | Protocol adapter | ✅ **PASS — `lib/protocol/{gate,access,clients}.ts`; harness rewired onto them; verifier verdict unchanged (40/0/3 offline), 93 tests, 2026-10-10** |
 | BUILD 5 | Product UI (four surfaces) | ✅ **CLICKABLE — 2026-10-11.** Landing page, docket, status copy and Proof Receipt live and read from the committed evidence; responsive at six viewports with no overflow; **the action performs a real `eth_call` to the vault's read condition on live Aeneid** and returns ALLOWED for the licence holder and DENIED for everyone else, verified through the built production server. Still cannot print `ACCESS GRANTED` — it checks the licence, it does not decrypt. 105 tests. |
 | BUILD 6 | Visual system | ✅ **SCORED 22/24 — 2026-10-12.** No trigger zero (clarity, identity, mechanism, honesty all 2). Nine real-state screenshots driven through the real UI by `tools/ui-capture.mjs`, which asserts each scene reached the state it claims. Full scoring in `docs/VISUAL_QA.md`. Scored 1 in state coverage (`ACCESSING`/`ACCESS GRANTED` unreachable from the browser), motion (correct but sparse) and mobile (header 87px at 320px, a deliberate trade). The brief's "real unlocked result" screenshot is **declared absent, not fabricated**. Three defects fixed: the status label had no live region, the audit measured the wrong element, the audit silently reported empty viewports. |
-| BUILD 7 | Security / adversarial | ⬜ NOT STARTED |
-| BUILD 8 | Deployment (Vercel) | ⬜ NOT STARTED |
+| BUILD 7 | Security / adversarial | ✅ **PASS 2026-10-12 — one real finding, fixed and verified live.** See below. |
+| BUILD 8 | Deployment (Vercel) | ⬜ NOT STARTED — **token available; tell the user before using it** |
 | BUILD 9 | Submission | ⬜ NOT STARTED |
 
 Legend: ⬜ not started · ⏳ in progress · ✅ PASS · 🚫 BLOCKED · ❌ FAILED
@@ -1077,13 +1169,20 @@ and avoids depending on unreleased `main`-branch code.
     nine real-state screenshots in `qa-screens/` produced by `npm run ui:capture`. One item of the
     brief's §9 evidence list is **absent and declared absent**: the real unlocked result, because it
     needs the protected read. Do not fabricate it.
-11. **BUILD 7 — security / adversarial pass.** Not started. The build contracts' §9 rules are already
-    enforced by tests (never `NEXT_PUBLIC_PRIVATE_KEY`, never a key in Git, never a mock standing in
-    for a failed operation); BUILD 7 is the pass that tries to break them rather than restate them.
+11. ✅ **BUILD 7 — security / adversarial pass.** **Done 2026-10-12; one real finding.** The public
+    route returned the operator's RPC URL — and therefore their API key, for any hosted provider
+    that puts it in the path — to any anonymous caller who made the RPC fail. Confirmed live
+    against a production server, fixed in `lib/access/redact.ts`, verified live again against a
+    rebuilt server, pinned by 7 tests. Also: `cache-control: no-store`, a process-wide probe
+    ceiling that spoofing cannot bypass, and an explicit in-code statement that the per-client
+    limiter is **not** a security boundary. Write-up in `docs/SECURITY.md` §8.
 12. **BUILD 8 — Vercel.** ⚠️ **Tell the user before using the token.** The user has offered a
     full-access Vercel token at `…\COLOSEUM\USAGEBAR\local-wallet`; it must never be committed or
     echoed. Both prerequisites are now met — the UI exists and is scored, and the check runs on a
-    deployed server with no key, no gas and no keeper API.
+    deployed server with no key, no gas and no keeper API. **The user asked on 2026-10-12 whether
+    this had been done; it had not, and they were told so.**
+    Before deploying, decide the `STORY_RPC_URL` question: on a host, the default keyless Aeneid
+    endpoint is fine, and now that redaction is in place a keyed provider is also safe.
 13. ✅ **The GitHub-secrets question, answered.** The keys were already handled and are not in Git:
     `AENEID_PRIVATE_KEY` and `AENEID_READER_PRIVATE_KEY` are repository secrets (set
     2026-10-05T20:42); `.github/workflows/spike.yml` injects them into a `workflow_dispatch`-only

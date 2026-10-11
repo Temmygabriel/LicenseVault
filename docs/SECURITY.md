@@ -1,8 +1,9 @@
 # SECURITY MODEL
 
 **Project:** LicenseVault
-**Last updated:** 2026-10-05
-**Scope:** the MVP flow — one protected resource gated by one onchain licensing condition.
+**Last updated:** 2026-10-12 (BUILD 7 — adversarial pass)
+**Scope:** the MVP flow — one protected resource gated by one onchain licensing condition,
+plus the public `/api/verify-license` endpoint added in BUILD 5.
 
 ---
 
@@ -101,6 +102,9 @@ product.
 | 11 | **Stale cached license state** | No indefinite caching. `RESET` returns to `LOCKED` so a refresh re-verifies rather than trusting a remembered success. | **Implemented + unit-tested** |
 | 12 | **Timeout presented as "no license"** | `classifyThrownError` maps any timeout to `INFRASTRUCTURE_FAILURE`; `phaseForFailure` can only route `AUTHORIZATION_FAILURE` to `NO_LICENSE`. | **Implemented + unit-tested** |
 | 13 | **Tampered CDR API response** | The endpoint is plain HTTP today, so responses are not authenticated in transit. Mitigated at the outcome level: a tampered partial yields garbage that fails the AES-GCM check, producing a decryption failure rather than a false unlock. | **OPEN — see §5** |
+| 14 | **RPC credential read back by an anonymous caller** | Found and fixed in BUILD 7 (see §8). The error branch returned the operator's RPC URL verbatim, and hosted providers put the API key in that URL. Redacted by `lib/access/redact.ts`. | **FIXED — verified end-to-end** |
+| 15 | **A per-caller verdict served to a different caller from a cache** | `cache-control: no-store, max-age=0` on every response from the route. A cached `LICENSE VERIFIED` for wallet A served to wallet B is a verdict about the wrong address. | **Implemented** |
+| 16 | **Endpoint used to spend the operator's RPC quota** | Per-client limiter (12/min) **plus** a process-wide ceiling (240/min) that spoofing cannot bypass. The per-client half is explicitly documented as *not* a security boundary — see §8. | **Implemented; edge limit deferred** |
 
 ---
 
@@ -202,17 +206,73 @@ invent a workaround.** That instruction is recorded here so it survives to BUILD
 
 | Test | Expected | Status |
 |---|---|---|
-| no license | read rejected | ⬜ BUILD 3 |
-| wrong IP license | read rejected | ⬜ BUILD 3 |
-| wrong terms/license | read rejected | ⬜ BUILD 3 |
-| arbitrary token | read rejected | ⬜ BUILD 3 |
-| malformed auxiliary data | rejected safely | ✅ unit-tested (empty list, negative id, bad address) |
+| no license | read rejected | ✅ live, BUILD 2 (`DENIED`) |
+| wrong IP license | read rejected | ✅ covered by #2 — `conditionData` pins the IP |
+| wrong terms/license | read rejected | ⬜ noted as a precision limit in `LIMITATIONS.md` |
+| arbitrary token | read rejected | ✅ live — unminted id reverts `ERC721NonexistentToken` (`0x7e273289`) |
+| malformed auxiliary data | rejected safely | ✅ live — empty `accessAuxData` reverts with no decodable reason, mapped to `UNKNOWN`, never `DENIED` |
 | wrong chain | blocked | ✅ implemented, unit-tested |
 | user rejects wallet action | clear cancellation | ✅ classified, unit-tested |
 | tx reverts | failure, not success | ✅ classified, unit-tested |
 | timeout | unknown/error, not success | ✅ unit-tested |
 | refresh after success | state revalidated | ✅ `RESET` unit-tested |
 | forged client state | cannot grant protected read | ✅ structurally prevented |
+| **bad address to the public route** | `400`, no chain call made | ✅ live + unit-tested |
+| **`GET` on the public route** | `405`, explained | ✅ live + unit-tested |
+| **RPC failure returns a credential** | no credential in the body | ✅ **live, BUILD 7** — `tests/redact.test.ts` |
+| **spoofed `x-forwarded-for`** | cannot lift the process-wide ceiling | ✅ unit-tested; documented as not-a-boundary |
 
-Network-level tests are pending because no vault exists on Aeneid yet. They are not marked
-complete until they run against the live chain.
+Network-level tests now run against the live chain — the canonical vault exists on Aeneid and
+`tools/verify-canonical-run.ts` re-derives every claim from it. See `docs/EVIDENCE.md`.
+
+---
+
+## 8. BUILD 7 — the credential leak, and why a comment would not have held
+
+**Found by:** reading the error branch of `app/api/verify-license/route.ts` rather than the happy
+path, then confirming it live.
+
+**The finding.** The route reports infrastructure failures honestly, and it returned the underlying
+viem message verbatim:
+
+```
+HTTP request failed.
+Status: 404
+URL: https://<operator-rpc-host>/v3/<OPERATOR_API_KEY>
+Request body: {"method":"eth_chainId"}
+Version: viem@2.57.3
+```
+
+Most hosted RPC providers — Alchemy, QuickNode, Infura — put the credential **in the URL path**.
+So any anonymous caller could POST, make the RPC fail, and read back the operator's RPC API key.
+For this deployment the default Aeneid endpoint is public and keyless, which is exactly why it would
+have gone unnoticed until someone configured a private one — the leak would appear the first time
+the app was configured *properly*.
+
+**Confirmed live, not reasoned about.** A server started with
+`STORY_RPC_URL="https://aeneid.storyrpc.io/v3/SUPER_SECRET_API_KEY"` returned that full URL in the
+response body. Re-run after the fix against a rebuilt server: the body keeps `Status: 404` and
+`viem@2.57.3`, and contains neither the key nor the host.
+
+**Why the fix is in a module with its own tests.** The leak lived in a code path that only runs
+*after* something else has already failed. Nobody reads the error branch while changing the success
+branch, so a comment saying "don't leak the URL here" is not a control — it is a note addressed to
+someone who is not looking. `lib/access/redact.ts` makes the safe behaviour the default and
+`tests/redact.test.ts` pins it with the real viem message.
+
+**What redaction keeps, on purpose.** `HTTP request failed` and `Status: 404` — the failure class
+and the HTTP status are what make the error actionable without naming the endpoint. Redaction that
+destroys the diagnostic is its own failure: the unreachable-RPC screenshot in `qa-screens/` depends
+on that text being legible. When redaction changes the text it *says so*, because a silently
+rewritten error message is its own kind of lie. The full message goes to the server log.
+
+**The rate limiter, stated accurately.** The per-client limit keys on `x-forwarded-for`, which a
+caller can set to anything when the app is not behind a proxy that overwrites it. Vary the header
+and the per-client budget is gone. That is tolerable **only** because nothing is being protected by
+it — the authorization decision is made by the chain, not by this counter — and because a
+process-wide ceiling (240/min) bounds total outbound probes regardless of what any caller claims
+about itself. The file says this out loud rather than letting a reviewer infer a boundary that is
+not there. A real per-client limit belongs at the edge.
+
+**Who may run the limiter's counters.** `MAX_KEY_LENGTH` bounds the map key, and the map is
+pruned, so a caller inventing unique header values cannot grow it without bound.
