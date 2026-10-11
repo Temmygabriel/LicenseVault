@@ -79,7 +79,10 @@ const PROBE = String.raw`(() => {
   const eyebrow = q("main p");
   const docket = q("article");
   const statusLabel = q(".status__label");
-  const action = q("button");
+  // The docket's primary action, not merely the first button on the page — the verification
+  // form sits above it and has buttons of its own.
+  const action = q(".docket__action .action--block");
+  const addressField = q("#wallet-address");
   const rows = qa(".docket__row dt").map((dt) => dt.textContent.trim());
   const valueOf = (label) => {
     const dt = qa(".docket__row dt").find((n) => n.textContent.trim().toLowerCase() === label);
@@ -124,6 +127,9 @@ const PROBE = String.raw`(() => {
     docket: { box: box(docket), bg: cs(docket, "background-color") },
     status: statusLabel ? statusLabel.textContent.trim() : null,
     action: { label: action ? action.textContent.trim() : null, disabled: action ? action.disabled : null },
+    addressField: addressField
+      ? { box: box(addressField), disabled: addressField.disabled }
+      : null,
     rows,
     licenseRequired: valueOf("license required"),
     licenseHolder: valueOf("license holder"),

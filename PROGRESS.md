@@ -1,11 +1,13 @@
 # LICENSEVAULT — LIVE BUILD PROGRESS
 
 > **This file is the running state of the project. It is updated at every phase boundary.**
-> Last updated: 2026-10-11 — **BUILD 5 (first pass) IS BUILT AND MEASURED. There is now a page a
-> judge can look at, and its every claim about the run is read from the committed evidence rather
-> than typed into the markup.** Responsiveness is measured at six viewports, not assumed; no
-> horizontal overflow anywhere. The access action is deliberately `disabled` and says why.
-> BUILD 4 precedes it: one implementation of the protocol, the harness a caller of it. 93 tests.
+> Last updated: 2026-10-11 — **BUILD 5 IS BUILT, MEASURED, AND NOW CLICKABLE.** There is a page a
+> judge can look at; its every claim about the run is read from the committed evidence rather than
+> typed into the markup; and its one action performs a **real `eth_call` against the vault's read
+> condition on live Aeneid**. Responsiveness is measured at six viewports, not assumed; no
+> horizontal overflow anywhere; 105 tests. It is still deliberately incapable of printing
+> `ACCESS GRANTED`, and the section below says exactly why.
+> BUILD 4 precedes it: one implementation of the protocol, the harness a caller of it.
 
 **Repo:** https://github.com/Temmygabriel/LicenseVault
 **Local:** `C:\Users\USER\Documents\HACKATHONS BUILDS\BLI_LEGALTECH_HACK\LICENSEVAULT`
@@ -13,7 +15,13 @@
 
 ---
 
-## 🟢 BUILD 5 (first pass) — THE PRODUCT SURFACE (2026-10-11)
+## 🟢 BUILD 5 — THE PRODUCT SURFACE (2026-10-11)
+
+> **Read this section in two halves.** The first half is the surface as it was built and measured
+> on its first pass — at that point the access action was `disabled` and said why. The second half,
+> **[BUILD 5 (second pass) — THE CHECK IS CLICKABLE](#-build-5-second-pass--the-check-is-clickable-2026-10-11)**,
+> replaced that disabled button with a real on-chain check. Everything in the first half about
+> layout, contrast, the receipt and the six explorer links is still exactly true.
 
 **The problem this phase exists to solve:** everything built so far is a CLI harness writing JSON.
 A judge cannot click JSON. BUILD 5 puts a real page in front of the run without letting the page
@@ -41,17 +49,22 @@ Aeneid by the verifier in BUILD 3.
 
 ### The one thing the page will not do
 
-**The `CHECK ACCESS` button is `disabled`, and the reason is printed under it.** This build has no
-wallet connector, so the page cannot learn which address is asking — and a docket that produced a
-verdict without asking the chain would be inventing it, which is the exact failure this product
-exists to avoid. The brief allows a disabled control *provided it explains itself honestly*; it
-does, in one sentence:
+*Superseded on the same day — the button is now wired. It is kept here because the rule it records
+is the reason the wired version is shaped the way it is: the page may not produce a verdict it did
+not ask the chain for. See the second-pass section below.*
+
+**On the first pass the `CHECK ACCESS` button was `disabled`, and the reason was printed under it.**
+That build had no wallet connector, so the page could not learn which address was asking — and a
+docket that produced a verdict without asking the chain would be inventing it, which is the exact
+failure this product exists to avoid. The brief allows a disabled control *provided it explains
+itself honestly*; it did, in one sentence:
 
 > Not wired to a wallet yet. This build has no wallet connector, so the docket cannot know which
 > address is asking — and it will not answer a question it never asked the chain.
 
 `AccessDocket` **throws** if an unwired action arrives with no `reason`, so the honest explanation
-cannot be dropped in a later edit without the build failing.
+cannot be dropped in a later edit without the build failing. That guarantee still holds, and it is
+what the second pass was built behind.
 
 ### Responsiveness — measured, not eyeballed
 
@@ -96,14 +109,133 @@ before believing a layout number.
 
 ### Honest gaps, stated here so a judge does not have to discover them
 
-- **No wallet connector.** The access flow is not clickable. The state machine and the protocol
-  adapter beneath it are real and have run end to end on Aeneid; the connection between a visitor's
-  wallet and those two is the next build.
+- **No wallet connector.** *(Closed in the second pass — see below. A browser wallet can now supply
+  the address, and pasting one works with no wallet at all.)*
 - **The CDR keeper API is plain HTTP on a private-range IP** (`http://172.192.41.96:1317`). A
   deployed server almost certainly cannot reach it, which means a *live* read from a deployed build
   would surface as `INFRASTRUCTURE_FAILURE` — never as `NO_LICENSE`. That is the correct behaviour
   (an unreachable dependency is not a verdict about the user) but it must be documented rather than
   discovered. Tracked as the §7 risk; must be resolved before BUILD 9.
+
+---
+
+## 🟢 BUILD 5 (second pass) — THE CHECK IS CLICKABLE (2026-10-11)
+
+**The problem this half exists to solve:** the first pass produced a page with a disabled button
+and an honest sentence underneath it. An honest sentence is not a demo. The obvious fix — "wire up
+a wallet and call the flow" — runs straight into three walls: reading a sealed record needs a
+private key and gas; the CDR keeper API that co-ordinates the read is plain HTTP on a private-range
+IP a deployed server cannot reach; and the brief forbids showing `ACCESS GRANTED` for anything short
+of the real decryption. Wiring the wallet naively would have produced a button that works on this
+laptop and fails in front of a judge.
+
+### The observation that unlocked it
+
+`checkReadCondition(uint32 uuid, bytes accessAuxData, bytes conditionData, address caller)` is a
+**`view` function**. The vault's read condition will answer the question *"may this address read
+this vault?"* — on-chain, for free, with:
+
+- no private key,
+- no gas,
+- no signature,
+- no CDR keeper API.
+
+That is the whole trick. The question the product actually needs to answer for a visitor is not "can
+you decrypt this" but "does this address hold the licence this vault's condition names", and that
+question is a free public read. The check therefore works from any deployed server with an RPC URL
+and nothing else — exactly the property the CDR keeper API lacks.
+
+It is only trustworthy because the four possible answers were **measured on live Aeneid in BUILD 4**
+rather than assumed (the table is in `lib/protocol/gate.ts`): empty aux data reverts with no
+decodable reason; an unminted token id reverts `ERC721NonexistentToken`; a real token id with a
+non-owner caller returns `false` — the only clean denial; a real token id with its owner returns
+`true`. So `false` means "no license" and *everything else* means "we could not tell".
+
+### What was built
+
+| Piece | File | What it does |
+|---|---|---|
+| Pinned vault | `lib/protocol/canonical-vault.ts` | The uuid, condition address, `conditionData`, token id and holder the route asks about — in code rather than read from the filesystem, because a serverless bundle has no promise that `evidence/` ships with it |
+| The route | `app/api/verify-license/route.ts` | `POST` an address → a real `eth_call` to Aeneid → a verdict. `nodejs` runtime, `force-dynamic`, 8s probe timeout, 12 checks/minute per client |
+| Verdict → state | `lib/access/verify.ts` | The **only** place a chain answer becomes something a user reads. Pure, shared with the tests and the CLI harness |
+| Client state | `components/AccessProvider.tsx` | One `useReducer` over the un-forked `lib/access/state.ts`, shared by the header chip and the docket so the two can never disagree about which address was checked |
+| The action | `components/AccessPanel.tsx` | The form, the two shortcuts, the problem text, and the button that becomes real |
+| Wallet chip | `components/WalletChip.tsx` | Shows `not connected`, or the address the chain was actually asked about |
+
+**The address is validated in the browser before it is sent** (`isAddress`), so a typo never becomes
+an on-chain question and therefore never becomes a licensing answer. It is re-validated on the
+server, which returns `400` for garbage — with a body that says in words that nothing was asked of
+the chain.
+
+**The route checks the chain id it actually reached** and returns `502` if it is not 1315, rather
+than answering about a different network. The client checks the returned `chainId` too, and treats a
+mismatch as `WRONG_NETWORK` — a failure, never a verdict.
+
+### Verified live, against Aeneid, through the built production server
+
+| Input | Response |
+|---|---|
+| the recorded license holder `0x226e…A863` | `{"verdict":{"kind":"ALLOWED"},"checkedAt":"2026-10-11T22:09:58.163Z","chainId":1315,"vaultUuid":11062}` |
+| the deployer/owner `0x75D9…aCa9` (holds no licence) | `DENIED` — *"the condition contract evaluated the caller's license and returned false"* |
+| `0x0000…dEaD` | `DENIED` |
+| `"not-an-address"` | HTTP **400**, and nothing was asked of the chain |
+| `GET` | HTTP **405** |
+
+The holder is ALLOWED and the owner is DENIED, which is the right way round: this vault's condition
+asks about a *licence*, not about ownership of the IP.
+
+### The limit, stated in the same breath as the result
+
+**This checks the licence. It does not perform the protected read and it does not decrypt.** So the
+strongest state it can reach is `LICENSE VERIFIED` — the state machine has no path from a verdict to
+`UNLOCKED`, and `tests/verify.test.ts` pins that: no verdict, including `ALLOWED`, produces
+`UNLOCKED`. `ACCESS GRANTED` remains unreachable until a real decryption happens, and the page's own
+copy says so rather than letting a green panel imply it.
+
+The same test file pins the failure that would be worst to get wrong:
+
+> **`REJECTED_REQUEST` is `INFRASTRUCTURE_FAILURE` and never a licensing decision.** A malformed
+> request is *our* defect. If it surfaced as `NO_LICENSE`, this product would tell a paying licensee
+> they hold no rights because of a bug on our side of the wire.
+
+`isProbeVerdict` additionally rejects anything that merely *looks* like success over the wire —
+`{ok:true,access:"GRANTED"}`, `{phase:"UNLOCKED"}` — because a proxy or a stale deploy might send one.
+
+### Responsiveness re-measured with the form present
+
+The form added a field and three controls inside the docket, so the numbers were taken again rather
+than assumed unchanged. **No horizontal overflow at any of the six viewports**, and the address
+field fits inside the docket at every width (604px at 1440 down to 222px at 320) — it carries
+`min-width: 0` and `text-overflow: ellipsis` so a 42-character address can never widen the card.
+
+| Viewport | Overflow | `h1` | Docket | Address field | Primary action |
+|---|---|---|---|---|---|
+| desktop 1440×900 | none | 68px | 654px | 604×46 | Verify license (enabled) |
+| desktop 1280×800 | none | 68px | 654px | 604×46 | Verify license (enabled) |
+| desktop 1024×768 | none | 56.32px | 529px | 479×46 | Verify license (enabled) |
+| tablet 768×1024 | none | 42.24px | 680px | 630×46 | Verify license (enabled) |
+| mobile 390×844 | none | 40px | 342px | 292×46 | Verify license (enabled) |
+| mobile 320×844 | none | 40px | 272px | 222×46 | Verify license (enabled) |
+
+### A defect in the instrument, found by using it
+
+`tools/ui-audit.mjs` probes "the first button on the page" to report the docket action. That was
+correct until the verification form arrived with buttons of its own, at which point the audit
+cheerfully reported the docket's action as **"Use the recorded license holder"**. The page was fine;
+the instrument was reading the wrong element. Fixed to target `.docket__action .action--block`
+explicitly, and it now reports `Verify license / disabled=false` at all six viewports. It is
+recorded here because the failure mode is the general one: **an instrument that silently measures
+the wrong element reports a plausible number.**
+
+### Tests: 93 → 105
+
+12 new tests in `tests/verify.test.ts` (the `ALLOWED`/`DENIED`/`REJECTED`/`UNKNOWN` table, the
+infrastructure-vs-authorization rule, no-verdict-reaches-`UNLOCKED`, and 10 malformed wire shapes
+that must be refused), plus 4 in `tests/canonical-vault.test.ts` that **re-derive every pinned
+identifier from the committed evidence on every run** — so if the evidence is regenerated and the
+constant is not updated, the build fails rather than a live `eth_call` quietly answering about a
+vault nobody can see evidence for. A `LICENSE VERIFIED` about the wrong vault would be a true
+statement about the wrong thing, and it would look exactly like success.
 
 ---
 
@@ -400,7 +532,7 @@ machine is 8 GB and the build step is deliberately not run here.
 | BUILD 2 | Minimal protocol spike | ✅ **PASS — executed end to end on live Aeneid 2026-10-07; ALL CHECKS PASSED** |
 | BUILD 3 | Evidence + verifier | ✅ **PASS — `tools/verify-canonical-run.ts`; 41 verified / 0 refuted / 1 unproven with `--live`, 2026-10-08** |
 | BUILD 4 | Protocol adapter | ✅ **PASS — `lib/protocol/{gate,access,clients}.ts`; harness rewired onto them; verifier verdict unchanged (40/0/3 offline), 93 tests, 2026-10-10** |
-| BUILD 5 | Product UI (four surfaces) | ⏳ **IN PROGRESS — first pass built and measured 2026-10-11.** Landing page, docket, status copy and Proof Receipt all live; responsive at six viewports with no overflow. **Not yet clickable**: no wallet connector, so `CHECK ACCESS` is disabled with a stated reason. |
+| BUILD 5 | Product UI (four surfaces) | ✅ **CLICKABLE — 2026-10-11.** Landing page, docket, status copy and Proof Receipt live and read from the committed evidence; responsive at six viewports with no overflow; **the action performs a real `eth_call` to the vault's read condition on live Aeneid** and returns ALLOWED for the licence holder and DENIED for everyone else, verified through the built production server. Still cannot print `ACCESS GRANTED` — it checks the licence, it does not decrypt. 105 tests. |
 | BUILD 6 | Visual system | ⏳ partially delivered inside BUILD 5 (locked palette, fonts, hierarchy, original marks, measured contrast); the 12-category visual-QA scoring pass has **not** been run |
 | BUILD 7 | Security / adversarial | ⬜ NOT STARTED |
 | BUILD 8 | Deployment (Vercel) | ⬜ NOT STARTED |
@@ -442,7 +574,7 @@ reachability); none of them is required for BUILD 2.
 cdr-sdk `main` but absent from the published 0.2.2 package. Recorded and resolved in
 `docs/PROTOCOL_DECISION.md` rather than silently worked around.
 
-### Test suite — what it actually proves (93 tests, 6 files)
+### Test suite — what it actually proves (105 tests, 8 files)
 
 | File | Tests | Proves |
 |---|---|---|
@@ -452,6 +584,8 @@ cdr-sdk `main` but absent from the published 0.2.2 package. Recorded and resolve
 | `tests/content.test.ts` | 9 | Protected content round-trips byte for byte, and a **wrong key, a tampered ciphertext, or a truncated blob all THROW** rather than returning bytes |
 | `tests/gate.test.ts` | 15 | The revert-is-not-a-denial rule, built from the **real viem messages captured on live Aeneid**: an unrecognised revert selector is `UNKNOWN` and never `DENIED` |
 | `tests/access.test.ts` | 12 | A malformed request classifies as `INFRASTRUCTURE_FAILURE` and **never** as `AUTHORIZATION_FAILURE` — asserted on its own labelled line, because it is the most consequential classifier in the project |
+| `tests/verify.test.ts` | 12 | The chain-answer → user-readable-state mapping the browser relies on: `ALLOWED`→`LICENSE_VERIFIED`, `DENIED`→`NO_LICENSE`, and `REJECTED_REQUEST`/`UNKNOWN`→`VERIFICATION_ERROR` as infrastructure failures — **no verdict reaches `UNLOCKED`**, however successful it was, and 10 malformed wire shapes are refused, including payloads shaped like success |
+| `tests/canonical-vault.test.ts` | 4 | Every identifier the verification route pins is **re-derived from the committed evidence on every run** — so the route cannot silently end up checking a vault no evidence describes |
 
 Three properties are worth calling out because they are structural, not stylistic:
 
@@ -845,14 +979,22 @@ and avoids depending on unreleased `main`-branch code.
    the on-chain vault record) and `lib/protocol/clients.ts` (client construction). The harness now
    imports all three and keeps none of its own copies. 93 tests; the verifier's verdict is
    unchanged, which is the point.
-9. ⏳ **BUILD 5 — the product UI.** First pass is built and measured (see the BUILD 5 section):
-   the landing page, the state-typed Access Docket, the Proof Receipt read from the committed run,
-   original marks, and a measured responsive result across six viewports. **What remains:** wire a
-   visitor's wallet to `lib/protocol/*` so `CHECK ACCESS` stops being disabled, run the brief's
-   12-category visual-QA scoring pass (≥20/24), and capture the remaining state screenshots
-   (no-license / unlocked / error / proof).
-10. **BUILD 8 — Vercel.** User has offered to issue a token so deployment can be driven the same
-    way GitHub is. Not needed until the UI exists; raise it when BUILD 5 lands.
+9. ⏳ **BUILD 5 — the product UI.** The page and the live check are both built and verified (see
+   both BUILD 5 sections): the landing page, the state-typed Access Docket, the Proof Receipt read
+   from the committed run, original marks, a measured responsive result across six viewports, and a
+   `CHECK ACCESS` action that performs a **real `eth_call`** to the vault's read condition on live
+   Aeneid — ALLOWED for the licence holder, DENIED for the owner, 400 for garbage, 405 for `GET`.
+   **What remains:** the brief's 12-category visual-QA scoring pass (≥20/24), and the state
+   screenshots for §9 evidence (LICENSE VERIFIED / NO LICENSE / VERIFICATION ERROR / proof).
+10. **BUILD 8 — Vercel.** ⚠️ **Tell the user before using the token.** The user has offered a
+    full-access Vercel token at `…\COLOSEUM\USAGEBAR\local-wallet`; it must never be committed or
+    echoed. Raised when BUILD 5 landed — which is now.
+11. ✅ **The GitHub-secrets question, answered.** The keys were already handled and are not in Git:
+    `AENEID_PRIVATE_KEY` and `AENEID_READER_PRIVATE_KEY` are repository secrets (set
+    2026-10-05T20:42); `.github/workflows/spike.yml` injects them into a `workflow_dispatch`-only
+    job scoped to `contents: read`; locally they live only in gitignored `secrets/aeneid-owner.key`
+    and `secrets/aeneid-reader.key`. The verification flow does **not** use either key — that is the
+    point of it being a `view` call.
 
 ---
 
@@ -863,15 +1005,19 @@ and avoids depending on unreleased `main`-branch code.
   11062, licence token 73227, an authorized read that returned a key, a refused read from an
   unlicensed wallet, and content decrypted byte for byte. The mechanism **is** demonstrated end
   to end at the protocol level.
-- What is still not built: **the clickable access flow.** The demonstration above is still driven by
-  a CLI harness writing JSON — BUILD 5 puts a real page in front of that run (its Proof Receipt is
-  read from the committed artifacts, not typed in), but the page cannot yet ask a wallet to perform
-  a read, so `CHECK ACCESS` is `disabled` and says why. BUILD 3 re-checks the JSON from the chain,
-  and BUILD 4 means the UI flow, when it is wired, will consume the *same* gate rule and the *same*
-  failure classifier rather than re-deriving them.
-- The interface (`app/page.tsx`) renders the Access Docket in `LOCKED` — the state before any
-  question has been asked. It does not pretend to verify anything, and it cannot reach `UNLOCKED`
-  without a real read.
+- What is still not built: **the protected read from the browser.** The end-to-end demonstration is
+  still driven by a CLI harness writing JSON — BUILD 5 puts a real page in front of that run (its
+  Proof Receipt is read from the committed artifacts, not typed in), and the page **can** now ask
+  the chain a real question: whether a given address holds the licence this vault's condition names.
+  That is a free `view` call, so it needs no key, no gas and no keeper API. What the page still
+  cannot do is **perform the read and decrypt** — that path needs a funded account and the CDR
+  keeper API, which is plain HTTP on a private-range IP. So the strongest thing on the page is
+  `LICENSE VERIFIED`, never `ACCESS GRANTED`, and the copy says so. BUILD 3 re-checks the JSON from
+  the chain, and the UI flow consumes the *same* gate rule and the *same* failure classifier as the
+  harness rather than re-deriving them.
+- The interface (`app/page.tsx`) renders the Access Docket in `LOCKED` until a visitor asks. It does
+  not pretend to verify anything, and it cannot reach `UNLOCKED` without a real read — a licence
+  check, however successful, is not one.
 - `docs/UX_TEST.md` has been written but **the test has not been run** — no human has been
   tested. The results table is deliberately blank.
 

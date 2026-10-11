@@ -16,7 +16,6 @@ import {
   createWalletClient,
   http,
   type Account,
-  type Address,
   type PublicClient,
   type WalletClient,
 } from "viem";
@@ -121,9 +120,11 @@ export function createCdrObserverClient(params: {
 /** The chain this build targets, re-exported so callers do not import constants directly. */
 export const EXPECTED_CHAIN_ID: number = AENEID_CHAIN_ID;
 
+/**
+ * A short display form of an address for UI copy: 0x1234…abcd.
+ *
+ * Re-exported from `lib/format.ts`, which is where it now lives — a client component must be
+ * able to import it without pulling this module's SDK imports into the browser bundle.
+ */
+export { shortAddress } from "../format";
 
-/** A short display form of an address for UI copy: 0x1234…abcd. */
-export function shortAddress(address: Address | string): string {
-  const value = String(address);
-  return value.length <= 12 ? value : `${value.slice(0, 6)}…${value.slice(-4)}`;
-}

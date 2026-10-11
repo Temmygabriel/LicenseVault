@@ -12,8 +12,13 @@
  *    looks live but answers from local state is the exact failure this project is built to
  *    refuse, so when there is no handler the button is `disabled` and the reason is printed
  *    underneath it, in the same breath.
+ *
+ * The handler itself is never implemented here. This component receives one, or it does not —
+ * it has no branch that could reach a verdict on its own.
  * ─────────────────────────────────────────────────────────────────────────────
  */
+
+import type { ReactNode } from "react";
 
 import { LicenseStatus, statusCopy } from "./LicenseStatus";
 import { ProtectedAsset } from "./ProtectedAsset";
@@ -25,6 +30,16 @@ export interface DocketAction {
   onActivate?: () => void;
   /** Shown under a disabled action. Required whenever the action cannot be used. */
   reason?: string;
+  /** True while the real work is in flight, so the control cannot be fired twice. */
+  busy?: boolean;
+  /**
+   * When set, the button submits this form instead of calling `onActivate` directly.
+   *
+   * Real form semantics, not decoration: a `<button type="submit" form="…">` means Enter in the
+   * address field submits, the control is reachable by keyboard in the expected order, and the
+   * browser associates the label with the field.
+   */
+  formId?: string;
 }
 
 export interface AccessDocketProps {
@@ -42,6 +57,8 @@ export interface AccessDocketProps {
   /** Compact network badge for the docket header — `Aeneid · Testnet`. */
   networkBadge: string;
   action: DocketAction;
+  /** The address field and its explanations, when the flow is wired. */
+  children?: ReactNode;
 }
 
 function actionLabelFor(state: AccessState, fallback: string): string {
@@ -70,10 +87,11 @@ export function AccessDocket({
   networkLabel,
   networkBadge,
   action,
+  children,
 }: AccessDocketProps) {
   const copy = statusCopy(state.phase);
   const label = actionLabelFor(state, action.label);
-  const wired = action.onActivate !== undefined;
+  const wired = action.onActivate !== undefined || action.formId !== undefined;
 
   if (!wired && action.reason === undefined) {
     // A disabled control with no stated reason is exactly the thing the UI lock forbids. Fail
@@ -133,10 +151,14 @@ export function AccessDocket({
       </dl>
 
       <div className="docket__action">
+        {children}
         <button
-          type="button"
+          type={action.formId === undefined ? "button" : "submit"}
+          form={action.formId}
+          onClick={action.formId === undefined ? action.onActivate : undefined}
           className="action action--block"
-          disabled={!wired}
+          disabled={!wired || action.busy === true}
+          aria-busy={action.busy === true}
           aria-describedby="docket-action-note"
         >
           {label}

@@ -222,6 +222,98 @@ body {
   max-width: 52ch;
 }
 
+/* ── The verification form ───────────────────────────────────────────────── */
+
+.verify {
+  margin: 0 0 var(--space-4);
+}
+
+.field {
+  display: block;
+}
+
+.field__label {
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.field__input {
+  display: block;
+  width: 100%;
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: var(--space-3) var(--space-4);
+  color: var(--ink);
+  background: var(--surface);
+  border: var(--border) solid var(--border-strong);
+  border-radius: var(--radius-small);
+  /* Addresses are long and should never widen the docket. */
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+.field__input::placeholder {
+  color: var(--text-secondary);
+}
+
+.field__input:disabled {
+  color: var(--text-secondary);
+  background: #eee8dc;
+  cursor: not-allowed;
+}
+
+.verify__help {
+  margin: var(--space-3) 0 0;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  max-width: 52ch;
+}
+
+.verify__shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+  margin-top: var(--space-3);
+}
+
+/* A secondary action that reads as text, not as a second dominant button. */
+.linkish {
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-strong);
+  padding-bottom: 1px;
+}
+
+.linkish:hover:not(:disabled) {
+  border-bottom-color: var(--ink);
+}
+
+.linkish:disabled {
+  color: var(--text-secondary);
+  border-bottom-color: var(--border-subtle);
+  cursor: not-allowed;
+}
+
+/* An input we rejected, or a check that could not be completed. Never a licensing answer. */
+.verify__problem {
+  margin: var(--space-3) 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--error-red);
+  border-left: 2px solid var(--error-red);
+  padding-left: var(--space-3);
+  max-width: 52ch;
+}
+
 /* ── The protected resource preview ──────────────────────────────────────── */
 
 .resource {
