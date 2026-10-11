@@ -148,6 +148,31 @@ The Story-API REST endpoint documented by the CDR SDK is `http://172.192.41.96:1
 value, label it "Plain HTTP. May change between deployments.", and advise pointing `apiUrl`
 at your own node's REST gateway for production.
 
+### Measured 2026-10-12 — it is reachable, and it is PUBLIC
+
+An earlier note in this repo described this host as a private-IP endpoint that a deployed server
+could not reach. **That was wrong, and it was wrong in the direction that matters** — it made the
+full browser unlock look architecturally impossible when it is not. Measured:
+
+| Check | Result |
+|---|---|
+| `172.192.41.96` inside `172.16.0.0/12`? | ❌ **No.** `172.192` is outside the private range, so this is a **public IP**. |
+| Local interfaces | `10.120.8.238` only — the keeper is not a local alias faking reachability. |
+| `GET /dkg/cdr_partials` | **HTTP 500** in 0.92s: `{"code":500,"error":"requester_pub_key_hex is required"}` |
+
+That last line is the decisive one: a *live application error naming a required parameter*, not a
+timeout, not a connection refusal, not a Go 404 from a dead port. Something real is serving CDR
+there. No reverse DNS, which is normal for cloud hosts.
+
+**What this changes.** Reachability was never the blocker for doing the protected read from a
+deployed server; the plain-HTTP transport is (below). Whether a Vercel serverless function can
+reach it is still unconfirmed and is a BUILD 8 measurement, not an assumption — but the prior is
+now "probably yes" rather than "no".
+
+**What it does not change.** The browser still cannot do the full unlock, for a different reason:
+the read is fee-bearing, so it needs a funded account, and that key must not exist in the browser.
+That is the real design constraint, and `docs/LIMITATIONS.md` records it.
+
 **The endpoint is in the trust path — this is stated by the SDK, not inferred.** The published
 `Consumer` docs say partials come from `/dkg/cdr_partials`, that the keeper verifies each
 validator's signature on ingress and *drops the signature bytes*, and that **"the SDK trusts
