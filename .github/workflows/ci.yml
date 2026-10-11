@@ -101,10 +101,39 @@ jobs:
           )
 
           # A 0x-prefixed 64-hex private key. Exclude docs, lockfile and evidence.
-          if git grep -nEI '0x[a-fA-F0-9]{64}' -- . \
-              ':!package-lock.json' ':!*.md' ':!evidence/**' > /tmp/hits.txt; then
-            echo "::error::Possible private key found in tracked source:"
-            cat /tmp/hits.txt
+          #
+          # This check fired on `lib/protocol/canonical-vault.ts` on 2026-10-11, and the finding
+          # was WRONG in a way worth writing down, because BUILD 3's verifier hit the identical
+          # trap: `abi.encode(address)` is exactly 64 hex characters — the same length as a
+          # private key — so an ABI-encoded condition blob looks like a key to any regex that
+          # counts characters.
+          #
+          # It is not fixed by excluding the file. That would blind the check to a real key in
+          # the one file most likely to hold one. It is fixed by the shape: an ABI-encoded
+          # `address` is ALWAYS 12 zero bytes then 20 bytes, i.e. `0x` + 24 zeros + 40 hex. A
+          # genuine private key is a scalar in [1, n-1], so 96 leading zero bits has probability
+          # about 2^-96 — it cannot happen. The distinction is therefore a property of the data,
+          # not a list of files we have decided to trust.
+          #
+          # Both categories are printed either way, so a reviewer can see what was excluded
+          # rather than having to trust that something was.
+          #
+          # This exclusion is not on trust either: `tests/canonical-vault.test.ts` asserts that
+          # `conditionData` decodes to the licence contract and the IP asset, so the excluded
+          # blob is proven to be an encoded pair of addresses on every run. If that shape ever
+          # stops holding, that test fails and this exclusion loses its basis.
+          git grep -nEIo '0x[a-fA-F0-9]{64}' -- . \
+              ':!package-lock.json' ':!*.md' ':!evidence/**' > /tmp/hits.txt || true
+          grep -E ':0x0{24}[a-fA-F0-9]{40}$' /tmp/hits.txt > /tmp/abi.txt || true
+          grep -vE ':0x0{24}[a-fA-F0-9]{40}$' /tmp/hits.txt > /tmp/keys.txt || true
+
+          echo "64-hex occurrences excluded as ABI-encoded addresses (12 zero bytes + 20):"
+          sed 's/^/  /' /tmp/abi.txt
+          echo "64-hex occurrences treated as key material:"
+          sed 's/^/  /' /tmp/keys.txt
+
+          if [ -s /tmp/keys.txt ]; then
+            echo "::error::Possible private key found in tracked source (see the second list above)."
             exit 1
           fi
 
