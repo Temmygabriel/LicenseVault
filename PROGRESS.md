@@ -1,12 +1,14 @@
 # LICENSEVAULT — LIVE BUILD PROGRESS
 
 > **This file is the running state of the project. It is updated at every phase boundary.**
-> Last updated: 2026-10-11 — **BUILD 5 IS BUILT, MEASURED, AND NOW CLICKABLE.** There is a page a
-> judge can look at; its every claim about the run is read from the committed evidence rather than
-> typed into the markup; and its one action performs a **real `eth_call` against the vault's read
-> condition on live Aeneid**. Responsiveness is measured at six viewports, not assumed; no
-> horizontal overflow anywhere; 105 tests. It is still deliberately incapable of printing
-> `ACCESS GRANTED`, and the section below says exactly why.
+> Last updated: 2026-10-12 — **BUILD 5 IS BUILT, MEASURED, AND CLICKABLE; BUILD 6 IS SCORED.**
+> There is a page a judge can look at; its every claim about the run is read from the committed
+> evidence rather than typed into the markup; and its one action performs a **real `eth_call`
+> against the vault's read condition on live Aeneid**. Responsiveness is measured at six viewports,
+> not assumed; no horizontal overflow anywhere; 105 tests. It is still deliberately incapable of
+> printing `ACCESS GRANTED`, and the section below says exactly why. The 12-category visual gate is
+> scored **22/24** in `docs/VISUAL_QA.md`, with one required screenshot declared absent rather than
+> fabricated.
 > BUILD 4 precedes it: one implementation of the protocol, the harness a caller of it.
 
 **Repo:** https://github.com/Temmygabriel/LicenseVault
@@ -240,6 +242,97 @@ statement about the wrong thing, and it would look exactly like success.
 ---
 
 
+
+## 🟢 BUILD 6 — THE VISUAL GATE, SCORED (2026-10-12)
+
+**The problem this phase exists to solve:** a visual-quality gate scored by the person who built the
+thing is worth nothing unless the numbers can be re-measured and the gaps are named. The brief sets
+a 20/24 floor across 12 categories and makes a zero in clarity, identity, mechanism or honesty a
+redesign trigger. **Scored 22/24 with no trigger zero.** The full scoring document is
+`docs/VISUAL_QA.md`; what follows is what changed.
+
+### Real-state screenshots, driven through the real UI
+
+`tools/ui-capture.mjs` (`npm run ui:capture`) is a committed instrument, not a script that took some
+pictures. It waits for React to hydrate, types an address, submits the form, waits for the machine
+to settle, **asserts the state is the one the scene claims**, and only then writes the PNG. A scene
+that settles on the wrong state is refused rather than photographed. Nine images in `qa-screens/`:
+
+| Evidence | Files |
+|---|---|
+| LOCKED | `desktop-locked` (1440), `mobile-locked` (390), `narrow-locked` (320) |
+| LICENSE VERIFIED (real holder) | `desktop-verified`, `mobile-verified` |
+| NO LICENSE (real non-holder) | `desktop-no-license`, `mobile-no-license` |
+| VERIFICATION ERROR | `desktop-verification-error` |
+| Proof receipt | `desktop-proof` |
+
+**The error state has a real cause, not a mocked one.** It is captured against a server started with
+`STORY_RPC_URL=http://127.0.0.1:9`, and the tool *refuses* to produce it against a healthy server —
+and refuses the other scenes against an unhealthy one. A screenshot of a state the app cannot
+actually produce is a drawing.
+
+### The one required screenshot that does not exist
+
+The brief's §9 list asks for **"Desktop 1440×900: real unlocked result with recovered content"**.
+**`desktop-unlocked.png` does not exist.** Reaching `ACCESS GRANTED` needs the actual confidential
+read: a funded Aeneid account and the CDR keeper API, which is plain HTTP on a private-range IP that
+a deployed server cannot reach. The brief says twice not to manufacture states, so the file is
+**declared absent** in `docs/VISUAL_QA.md` rather than omitted quietly or faked. It becomes
+producible with the §7 keeper-API work.
+
+### Scored 1 in exactly three places, all non-trigger, each for a stated reason
+
+- **State coverage (1/2).** Five states are reachable and photographed; `ACCESSING` and
+  `ACCESS GRANTED` exist in the machine and in `tests/state.test.ts` but not in the browser — the
+  same reason as above.
+- **Motion (1/2).** Reduced-motion is honoured and the busy state is legible, but the docket swaps
+  the status label in place with no gesture marking the change. Correct, and sparse.
+- **Mobile (1/2).** 390 and 320 both render with no horizontal scroll and the action enabled, but the
+  header measures **87px at 320px** against the locked 64–72px. This is a deliberate trade: the
+  brief separately requires no horizontal scroll at 320px, and the header carries a mark, a wordmark,
+  two links and a wallet chip. Two of the brief's own requirements conflict at that width;
+  no-horizontal-scroll won. Recorded because a judge measuring the header will find 87px.
+
+### What the scoring pass actually fixed (it was not only a scoring exercise)
+
+1. **The status label had no live region**, though brief §7 asks for `role="status"`/`aria-live` on
+   important state changes. A sighted visitor watched LOCKED become LICENSE VERIFIED; a
+   screen-reader user was told nothing — and since the only action is asynchronous there was no
+   other moment the change would be announced. `LicenseStatus` now carries `role="status"`.
+2. **The audit's "supporting sentence" probe measured the wrong element** — it was reading the 11px
+   eyebrow — and derived characters-per-line from an assumed 0.5em average glyph width, a guess
+   dressed as a number, in a document that then quoted it. It now finds the paragraph after the `h1`
+   positionally (CSS Modules hash the class name, so a measurement tool must not depend on one) and
+   counts real line boxes with `Range.getClientRects()`.
+3. **The audit silently reported six empty viewports.** A duplicate `const` made the probe a
+   `SyntaxError`, which returns `undefined`, which spreads into a row containing only the viewport
+   name — indistinguishable from "measured, and there was nothing there". It now throws on any
+   exception the page reports.
+
+**The measured result of the corrected probe, at 1440:** two columns at **42% / 58%** with a
+**64px** gap and a 654px docket, the supporting sentence at 17px across **36 characters per line**.
+Against the brief's 42/58, 48–64px, 600–680px and ~45 characters — all inside.
+
+### A pattern worth naming, because it has now happened three times
+
+Every one of those three defects is the same shape: **an instrument that fails quietly and reports a
+plausible number.** Before them there was the audit's button probe reporting the docket's action as
+*"Use the recorded license holder"* (it was reading the verification form's button), and the capture
+tool's hydration check passing on server-rendered HTML that React did not yet own (so every scene
+photographed `LOCKED`). None of these was a product bug; all five would have shipped a confident
+false statement about the product. The fix each time was to measure the thing itself — the real
+line boxes, the real hydration marker, the element the claim is about — rather than a proxy for it.
+
+### The stale-server trap reproduced itself, and the instrument caught it
+
+After a rebuild, the old `next start` on :4174 survived (EADDRINUSE on the new one) with an
+in-memory manifest pointing at chunk filenames the rebuild had deleted. Its JS 404s, so React never
+hydrated. BUILD 5 recorded this trap as producing a whole run of fake layout findings; this time the
+capture tool's hydration assertion stopped it with *"React never took over the form"*. **The rule
+from BUILD 5 should be applied before every measurement run:** `netstat -ano | grep :<port>`,
+`taskkill //F //PID <pid>`, then start the server — never assume the old one died.
+
+---
 
 ## 🟢 BUILD 4 — ONE IMPLEMENTATION OF THE PROTOCOL (2026-10-10)
 
@@ -533,7 +626,7 @@ machine is 8 GB and the build step is deliberately not run here.
 | BUILD 3 | Evidence + verifier | ✅ **PASS — `tools/verify-canonical-run.ts`; 41 verified / 0 refuted / 1 unproven with `--live`, 2026-10-08** |
 | BUILD 4 | Protocol adapter | ✅ **PASS — `lib/protocol/{gate,access,clients}.ts`; harness rewired onto them; verifier verdict unchanged (40/0/3 offline), 93 tests, 2026-10-10** |
 | BUILD 5 | Product UI (four surfaces) | ✅ **CLICKABLE — 2026-10-11.** Landing page, docket, status copy and Proof Receipt live and read from the committed evidence; responsive at six viewports with no overflow; **the action performs a real `eth_call` to the vault's read condition on live Aeneid** and returns ALLOWED for the licence holder and DENIED for everyone else, verified through the built production server. Still cannot print `ACCESS GRANTED` — it checks the licence, it does not decrypt. 105 tests. |
-| BUILD 6 | Visual system | ⏳ partially delivered inside BUILD 5 (locked palette, fonts, hierarchy, original marks, measured contrast); the 12-category visual-QA scoring pass has **not** been run |
+| BUILD 6 | Visual system | ✅ **SCORED 22/24 — 2026-10-12.** No trigger zero (clarity, identity, mechanism, honesty all 2). Nine real-state screenshots driven through the real UI by `tools/ui-capture.mjs`, which asserts each scene reached the state it claims. Full scoring in `docs/VISUAL_QA.md`. Scored 1 in state coverage (`ACCESSING`/`ACCESS GRANTED` unreachable from the browser), motion (correct but sparse) and mobile (header 87px at 320px, a deliberate trade). The brief's "real unlocked result" screenshot is **declared absent, not fabricated**. Three defects fixed: the status label had no live region, the audit measured the wrong element, the audit silently reported empty viewports. |
 | BUILD 7 | Security / adversarial | ⬜ NOT STARTED |
 | BUILD 8 | Deployment (Vercel) | ⬜ NOT STARTED |
 | BUILD 9 | Submission | ⬜ NOT STARTED |
@@ -979,17 +1072,19 @@ and avoids depending on unreleased `main`-branch code.
    the on-chain vault record) and `lib/protocol/clients.ts` (client construction). The harness now
    imports all three and keeps none of its own copies. 93 tests; the verifier's verdict is
    unchanged, which is the point.
-9. ⏳ **BUILD 5 — the product UI.** The page and the live check are both built and verified (see
-   both BUILD 5 sections): the landing page, the state-typed Access Docket, the Proof Receipt read
-   from the committed run, original marks, a measured responsive result across six viewports, and a
-   `CHECK ACCESS` action that performs a **real `eth_call`** to the vault's read condition on live
-   Aeneid — ALLOWED for the licence holder, DENIED for the owner, 400 for garbage, 405 for `GET`.
-   **What remains:** the brief's 12-category visual-QA scoring pass (≥20/24), and the state
-   screenshots for §9 evidence (LICENSE VERIFIED / NO LICENSE / VERIFICATION ERROR / proof).
-10. **BUILD 8 — Vercel.** ⚠️ **Tell the user before using the token.** The user has offered a
+9. ✅ **BUILD 5 — the product UI.** Built, measured and clickable. See both BUILD 5 sections.
+10. ✅ **BUILD 6 — the visual gate.** Scored **22/24** with no trigger zero, in `docs/VISUAL_QA.md`;
+    nine real-state screenshots in `qa-screens/` produced by `npm run ui:capture`. One item of the
+    brief's §9 evidence list is **absent and declared absent**: the real unlocked result, because it
+    needs the protected read. Do not fabricate it.
+11. **BUILD 7 — security / adversarial pass.** Not started. The build contracts' §9 rules are already
+    enforced by tests (never `NEXT_PUBLIC_PRIVATE_KEY`, never a key in Git, never a mock standing in
+    for a failed operation); BUILD 7 is the pass that tries to break them rather than restate them.
+12. **BUILD 8 — Vercel.** ⚠️ **Tell the user before using the token.** The user has offered a
     full-access Vercel token at `…\COLOSEUM\USAGEBAR\local-wallet`; it must never be committed or
-    echoed. Raised when BUILD 5 landed — which is now.
-11. ✅ **The GitHub-secrets question, answered.** The keys were already handled and are not in Git:
+    echoed. Both prerequisites are now met — the UI exists and is scored, and the check runs on a
+    deployed server with no key, no gas and no keeper API.
+13. ✅ **The GitHub-secrets question, answered.** The keys were already handled and are not in Git:
     `AENEID_PRIVATE_KEY` and `AENEID_READER_PRIVATE_KEY` are repository secrets (set
     2026-10-05T20:42); `.github/workflows/spike.yml` injects them into a `workflow_dispatch`-only
     job scoped to `contents: read`; locally they live only in gitignored `secrets/aeneid-owner.key`
