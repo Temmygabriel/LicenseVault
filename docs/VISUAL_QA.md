@@ -111,3 +111,34 @@ npm run ui:capture                         # LOCKED / VERIFIED / NO LICENSE / PR
 STORY_RPC_URL=http://127.0.0.1:9 npm start -- -p 4174     # deliberately unreachable RPC
 node tools/ui-capture.mjs http://localhost:4174/ qa-screens verification-error
 ```
+
+Both tools take the base URL as their first argument, so a server on another port is
+`node tools/ui-capture.mjs http://localhost:4177/ qa-screens`. Passing the wrong port is a clean
+`ECONNREFUSED`, not a set of empty screenshots — the tool will not photograph a server it cannot
+reach.
+
+---
+
+## Re-captured 2026-10-12, after the fonts were self-hosted
+
+The typography stack moved from `next/font/google` to `next/font/local` (see `app/fonts/README.md`)
+because the Google build-time fetch failed a CI run with twelve font-resolution errors and then
+passed on a re-run. A font change can move layout, so the score was not assumed to still hold.
+
+**Re-measured against the rebuilt server, every viewport identical to the numbers above:**
+
+| Viewport | Overflow | Header | `h1` | Docket | Columns | Supporting sentence |
+|---|---|---|---|---|---|---|
+| desktop-1440 | none | 69px | 68px | 654px | 42/58, gap 64 | 17px, 36 chars/line, 4 lines |
+| desktop-1280 | none | 69px | 68px | 654px | 42/58, gap 64 | 17px, 36 chars/line, 4 lines |
+| desktop-1024 | none | 69px | 56.32px | 529px | 42/58, gap 64 | 17px, 36 chars/line, 4 lines |
+| tablet-768 | none | 69px | 42.24px | 680px | single column | 17px, 36 chars/line, 4 lines |
+| mobile-390 | none | 69px | 40px | 342px | single column | 17px, 36 chars/line, 4 lines |
+| mobile-320 | none | **87px** | 40px | 272px | single column | 17px, 29 chars/line, 5 lines |
+
+Every figure matches the pre-change measurement, including the 320px header height that the mobile
+score of 1 is about. **The 22/24 stands unchanged, and the eight re-captured screenshots differ only
+in the check timestamp the docket displays** — `desktop-verification-error.png` was not re-captured,
+because it requires a server whose chain is deliberately unreachable and the tool refuses to
+photograph that state on a healthy one.
+
