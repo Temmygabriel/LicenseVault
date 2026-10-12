@@ -1,16 +1,21 @@
 # LICENSEVAULT — LIVE BUILD PROGRESS
 
 > **This file is the running state of the project. It is updated at every phase boundary.**
-> Last updated: 2026-10-12 — **BUILD 5 IS BUILT, MEASURED, AND CLICKABLE; BUILD 6 IS SCORED; BUILD 7 FOUND AND FIXED A REAL LEAK.**
-> There is a page a judge can look at; its every claim about the run is read from the committed
-> evidence rather than typed into the markup; and its one action performs a **real `eth_call`
-> against the vault's read condition on live Aeneid**. Responsiveness is measured at six viewports,
-> not assumed; no horizontal overflow anywhere; 112 tests. It is still deliberately incapable of
-> printing `ACCESS GRANTED`, and the section below says exactly why. The 12-category visual gate is
-> scored **22/24** in `docs/VISUAL_QA.md`, with one required screenshot declared absent rather than
-> fabricated. BUILD 7 confirmed, live, that the public route handed an anonymous caller the
-> operator's RPC credential in an error message — now redacted at the boundary and pinned by tests.
-> BUILD 4 precedes it: one implementation of the protocol, the harness a caller of it.
+> Last updated: 2026-10-12 — **BUILD 8 IS LIVE: https://licensevault.vercel.app**
+>
+> There is a page a judge can open, and its one action performs a **real `eth_call` to the vault's
+> read condition on live Aeneid** — the licence holder gets `ALLOWED`, the contract owner gets
+> `DENIED`, and that verdict is produced inside a Vercel serverless function with **no key, no gas
+> and no keeper API**. Every claim it makes about the recorded run is read from the committed
+> evidence rather than typed into the markup. Responsiveness is measured at six viewports, not
+> assumed; no horizontal overflow anywhere; 112 tests. The 12-category visual gate is scored
+> **22/24** in `docs/VISUAL_QA.md`, with one required screenshot declared absent rather than
+> fabricated.
+>
+> It is still deliberately incapable of printing `ACCESS GRANTED`: it verifies the *licence*, it does
+> not decrypt, and the section below says exactly why. BUILD 7 found that the public route was
+> handing anonymous callers the operator's RPC credential in an error message — confirmed live, now
+> redacted at the boundary and pinned by tests.
 
 **Repo:** https://github.com/Temmygabriel/LicenseVault
 **Local:** `C:\Users\USER\Documents\HACKATHONS BUILDS\BLI_LEGALTECH_HACK\LICENSEVAULT`
@@ -426,6 +431,77 @@ so the finding sits beside the other threats instead of only in a commit message
 
 ---
 
+## 🟢 BUILD 8 — LIVE ON VERCEL (2026-10-12)
+
+**Status: DEPLOYED AND VERIFIED AGAINST THE LIVE URL.**
+
+### 🔗 https://licensevault.vercel.app
+
+| | |
+|---|---|
+| Vercel project | `licensevault` (`prj_8dX8kCdCPaw0Bt6fo2vGVnyJihtk`), team `temmygabriel` |
+| Git link | `github:Temmygabriel/LicenseVault`, production branch `main` |
+| Framework | Next.js (auto-detected) |
+| Deployment | `dpl_J3okK1LudT3zbbq8trFRjeNBLrFi` — **READY** |
+| Environment variables | **NONE REQUIRED** |
+
+### It needs no configuration, and that is deliberate
+
+`AENEID_RPC_URL = "https://aeneid.storyrpc.io"` is a hardcoded verified constant in
+`lib/protocol/constants.ts`, and the app reads only two optional overrides (`STORY_RPC_URL`,
+`CDR_API_URL`). There is no `.env.local` in the repo, so **every local run to date has already
+exercised the exact code path the deployment runs** — the deployment adds no new configuration
+surface and cannot be broken by a missing variable.
+
+The keys are absent on purpose. `CDR_SERVER_PRIVATE_KEY`, `AENEID_PRIVATE_KEY` and
+`AENEID_READER_PRIVATE_KEY` are read only by the CLI harness. Putting a funded key into the
+deployment would place one next to a public endpoint and buy nothing: the page's check is a `view`
+call that needs no key at all.
+
+### Verified against the live URL, not against the build log
+
+| Test | Live result |
+|---|---|
+| `GET /` | ✅ HTTP 200, 40.7 KB, renders `LicenseVault` |
+| **Holder `0x226e…A863`** | ✅ `{"verdict":{"kind":"ALLOWED"},"chainId":1315,"vaultUuid":11062}` |
+| **Contract owner `0x75D9…aCa9`** | ✅ `DENIED` — correct: the condition asks about a *licence*, not ownership |
+| Zero address | ✅ `DENIED` |
+| `"not-an-address"` | ✅ HTTP **400**, and no chain call is made |
+| `{}` (missing field) | ✅ HTTP **400** |
+| `GET /api/verify-license` | ✅ HTTP **405** |
+| `cache-control` | ✅ `no-store, max-age=0` (BUILD 7's fix, live) |
+
+**The `ALLOWED` above is the whole project in one line.** Vercel's serverless function made a real
+`eth_call` to `checkReadCondition` on live Aeneid, and the protocol itself returned the verdict —
+from a datacentre, with no key, no gas, no signature and no CDR keeper API. That is the architectural
+fact BUILD 5 turned on, now confirmed in the environment a judge will actually open.
+
+### One discovery that corrects the record
+
+The repo described the CDR keeper at `172.192.41.96:1317` as a private-IP endpoint a deployed
+server could not reach. **That was wrong.** `172.192` is outside `172.16.0.0/12`, so it is a
+**public IP**, and it answers live:
+
+```
+GET /dkg/cdr_partials -> HTTP 500 {"code":500,"error":"requester_pub_key_hex is required"}
+```
+
+A live application error naming a required parameter — not a timeout, not a refusal, not a 404 from
+a dead port. Reachability was never the blocker for the protected read; the plain-HTTP transport is,
+and that is recorded as the one open item in `docs/SECURITY.md` §5. Whether Vercel's egress reaches
+it is still unmeasured — the prior is now "probably yes", and it is a BUILD 9 measurement rather than
+an assumption. Corrected in `docs/SECURITY.md` §5 and the memory file.
+
+### What is still not true, said plainly
+
+**The deployment does not unlock anything, and cannot.** It verifies the licence and stops. The
+protected read is fee-bearing and needs a funded signer, which must never exist in a browser or in a
+public deployment. So the strongest state the live site can reach is `LICENSE VERIFIED` — never
+`ACCESS GRANTED` — and `qa-screens/` still has no unlocked screenshot, because there is nothing
+honest to photograph.
+
+---
+
 ## 🟢 BUILD 4 — ONE IMPLEMENTATION OF THE PROTOCOL (2026-10-10)
 
 **The problem this phase exists to solve:** `tools/spike/build-vault.ts` learned, the hard way, the
@@ -720,7 +796,7 @@ machine is 8 GB and the build step is deliberately not run here.
 | BUILD 5 | Product UI (four surfaces) | ✅ **CLICKABLE — 2026-10-11.** Landing page, docket, status copy and Proof Receipt live and read from the committed evidence; responsive at six viewports with no overflow; **the action performs a real `eth_call` to the vault's read condition on live Aeneid** and returns ALLOWED for the licence holder and DENIED for everyone else, verified through the built production server. Still cannot print `ACCESS GRANTED` — it checks the licence, it does not decrypt. 105 tests. |
 | BUILD 6 | Visual system | ✅ **SCORED 22/24 — 2026-10-12.** No trigger zero (clarity, identity, mechanism, honesty all 2). Nine real-state screenshots driven through the real UI by `tools/ui-capture.mjs`, which asserts each scene reached the state it claims. Full scoring in `docs/VISUAL_QA.md`. Scored 1 in state coverage (`ACCESSING`/`ACCESS GRANTED` unreachable from the browser), motion (correct but sparse) and mobile (header 87px at 320px, a deliberate trade). The brief's "real unlocked result" screenshot is **declared absent, not fabricated**. Three defects fixed: the status label had no live region, the audit measured the wrong element, the audit silently reported empty viewports. |
 | BUILD 7 | Security / adversarial | ✅ **PASS 2026-10-12 — one real finding, fixed and verified live.** See below. |
-| BUILD 8 | Deployment (Vercel) | ⬜ NOT STARTED — **token available; tell the user before using it** |
+| BUILD 8 | Deployment (Vercel) | ✅ **LIVE — https://licensevault.vercel.app**, verified against the live URL 2026-10-12 |
 | BUILD 9 | Submission | ⬜ NOT STARTED |
 
 Legend: ⬜ not started · ⏳ in progress · ✅ PASS · 🚫 BLOCKED · ❌ FAILED

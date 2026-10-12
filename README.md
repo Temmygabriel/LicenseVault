@@ -10,6 +10,20 @@ required to read it.
 
 **BLI Legal Tech Hackathon 2** · development network: **Story Aeneid** (chain `1315`)
 
+### ▶ Live: **https://licensevault.vercel.app**
+
+Open it and paste `0x226e01730F6991C1BD11f58d1204638bee89A863` (the recorded licence holder) or
+`0x75D900D18866D8aA416CCEFD9e85D2C61dB0aCa9` (the contract owner, who holds no licence). Both
+answers come from a real `eth_call` to the vault's read condition on live Aeneid, made by the
+deployed server with **no key, no gas and no signature**.
+
+Being precise about what that means: the page verifies **the licence**, it does not decrypt. The
+end-to-end unlock — a real read that returns a data key, then content decrypted byte for byte — was
+executed on live Aeneid and is recorded in `evidence/licensevault-aeneid-001/`, but it needs a funded
+signer and so runs from the CLI harness, not from the browser. The strongest state the site can
+reach is `LICENSE VERIFIED`, and it will never print `ACCESS GRANTED` without a real decryption
+succeeding. See `docs/LIMITATIONS.md`.
+
 ---
 
 ## The one workflow
