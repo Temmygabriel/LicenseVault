@@ -492,6 +492,48 @@ and that is recorded as the one open item in `docs/SECURITY.md` §5. Whether Ver
 it is still unmeasured — the prior is now "probably yes", and it is a BUILD 9 measurement rather than
 an assumption. Corrected in `docs/SECURITY.md` §5 and the memory file.
 
+### The fonts are self-hosted now, because CI proved they had to be
+
+CI run `38186219718` failed on `10bf11a` — **a commit that changed only markdown** — with twelve
+errors:
+
+```
+Module not found: Can't resolve '@vercel/turbopack-next/internal/font/google/font'
+Error while looking up import map: next/font/google queries have exactly one entry
+```
+
+The re-run passed. That is the tell: `next/font/google` downloads fonts at **build** time, and Google
+rate-limits CI runners. The failure was a matter of when, not whether, and it would have hit a judge
+cloning the repo exactly as happily as it hit us.
+
+The nine latin-subset `woff2` files are now committed (`app/fonts/`, 424 KB) and loaded with
+`next/font/local`. **This is not a new dependency** — nothing was added to `package.json`;
+`next/font` self-hosted these fonts at runtime either way. The only thing that changed is that the
+build no longer depends on someone else's uptime, so it does not touch the UI brief's rule against
+adding libraries for the visual pass.
+
+Details that matter:
+
+- **Latin subset only.** The app is English-only, so latin-ext, cyrillic and greek would be dead
+  weight in the repo and in every visitor's cache.
+- **Exactly the declared weights** — no unused bytes ship.
+- **`adjustFontFallback` is explicit** (Times New Roman for the serif, Arial for the rest) to match
+  what the previous Google declarations produced. Leaving it unset would have quietly changed the
+  pre-swap fallback metrics the BUILD 6 measurements were taken against.
+- **`tools/fetch-fonts.mjs` verifies the `wOF2` magic bytes** on every file, so an HTML error page
+  from a captive portal can never be committed pretending to be a font; it also throws if Google
+  returns no `latin` block rather than silently writing a narrower stack than the page asks for.
+- Provenance and OFL licence recorded in `app/fonts/README.md`.
+
+**Verified:** build compiles with no font fetch, 9 `woff2` emitted, the built HTML references all
+nine from our own origin, and there is no `fonts.gstatic.com` or `fonts.googleapis.com` anywhere in
+the shipped output. Live: the fonts serve as `font/woff2` with valid magic bytes.
+
+**And the visual gate was re-measured, not assumed.** A font change can move layout, so all six
+viewports were measured again against the rebuilt server — **every figure identical**, including the
+320px header height of 87px that the mobile score of 1 is about. The 22/24 stands. Recorded in
+`docs/VISUAL_QA.md`.
+
 ### What is still not true, said plainly
 
 **The deployment does not unlock anything, and cannot.** It verifies the licence and stops. The
