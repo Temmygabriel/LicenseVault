@@ -1,7 +1,7 @@
 # LICENSEVAULT — LIVE BUILD PROGRESS
 
 > **This file is the running state of the project. It is updated at every phase boundary.**
-> Last updated: 2026-10-12 — **BUILD 8 IS LIVE: https://licensevault.vercel.app**
+> Last updated: 2026-10-13 — **BUILD 9 (Submission) PHASE 1 PASS**; BUILD 8 remains live at https://licensevault.vercel.app
 >
 > There is a page a judge can open, and its one action performs a **real `eth_call` to the vault's
 > read condition on live Aeneid** — the licence holder gets `ALLOWED`, the contract owner gets
@@ -20,6 +20,52 @@
 **Repo:** https://github.com/Temmygabriel/LicenseVault
 **Local:** `C:\Users\USER\Documents\HACKATHONS BUILDS\BLI_LEGALTECH_HACK\LICENSEVAULT`
 **Contracts read:** `LICENSEVAULT_BUILD_SPEC.md` (2005 lines) + `LICENSEVAULT_DEEPSEEK_MASTER_PROMPT.md` (1620 lines)
+
+---
+
+## 🟢 BUILD 9 · PHASE 1 — THE PROXY AUDIT, FINISHED (2026-10-13)
+
+> **Commit `ebb4dca`.** The build order (`FURTHER_INSTRUCTION.txt`) asked for eight phases. This
+> is PHASE 1: before anything is built on top of the keeper proxy, the proxy itself had to be
+> finished and its one unproven claim settled.
+>
+> **Two real defects, both fixed.** The 512 KB size cap was not a cap — the route did
+> `await upstream.text()` and *then* compared `.length`. That is a measurement taken after the
+> damage: an upstream streaming 4 GB writes all 4 GB into the function's memory before the check
+> that was supposed to stop it runs. It was wrong twice over, too, because a string's `.length`
+> counts UTF-16 code units rather than bytes (so a multi-byte body passes a byte cap it should
+> fail, by up to 3×), and because returning early without cancelling leaves the upstream still
+> producing bytes nobody will read. `readCapped()` now enforces the cap while consuming the
+> stream, counts real bytes, and cancels the reader.
+>
+> **The partials claim, settled honestly.** An earlier session probed `/dkg/cdr_partials` by hand,
+> got HTTP 500, and reported that as proof the endpoint worked. It was not — that 500 was
+> `requester_pub_key_hex must decode to an uncompressed secp256k1 public key`, the keeper
+> rejecting malformed input. A **second, different** 500 exists
+> (`partial decryption submission not found`) for a well-formed request whose requester key has no
+> partials yet, and the SDK's own `collectPartials` swallows it as a transient error and keeps
+> polling. Neither 500 proves retrieval, so neither is allowed to render as a green check.
+>
+> The claim is settled the only way it can be. `npm run verify:read` performs a real read from the
+> license-holding wallet, through the **deployed** proxy, with a requester key the tool keeps the
+> public half of — which is the whole trick, because the endpoint is indexed by that key:
+>
+> ```
+> chain 1315 · CDR readFee 0 wei   ← read on chain, not assumed free
+> … submitting the real read() transaction
+> partials endpoint through the proxy: first HTTP status 500,
+>   peak 5 submission(s) in round 46
+> data key 32 bytes · decrypted 804 bytes
+> sha256 46cab4a8232e4eea226500b424416a353618c8606008d374dbb15f56bc864cd7  MATCHES
+> reveals Commercial Brand Asset Pack
+> ```
+>
+> The first status is 500 because at that instant no partials existed. Seconds later the same
+> request returns real submissions. That is the distinction the earlier claim collapsed, and it is
+> now the distinction the transport tool's own output states out loud.
+>
+> **What PHASE 1 does not prove:** that a *browser* can do this. That is PHASE 2, and it is not
+> claimed here.
 
 ---
 
@@ -872,7 +918,7 @@ machine is 8 GB and the build step is deliberately not run here.
 | BUILD 6 | Visual system | ✅ **SCORED 22/24 — 2026-10-12.** No trigger zero (clarity, identity, mechanism, honesty all 2). Nine real-state screenshots driven through the real UI by `tools/ui-capture.mjs`, which asserts each scene reached the state it claims. Full scoring in `docs/VISUAL_QA.md`. Scored 1 in state coverage (`ACCESSING`/`ACCESS GRANTED` unreachable from the browser), motion (correct but sparse) and mobile (header 87px at 320px, a deliberate trade). The brief's "real unlocked result" screenshot is **declared absent, not fabricated**. Three defects fixed: the status label had no live region, the audit measured the wrong element, the audit silently reported empty viewports. |
 | BUILD 7 | Security / adversarial | ✅ **PASS 2026-10-12 — one real finding, fixed and verified live.** See below. |
 | BUILD 8 | Deployment (Vercel) | ✅ **LIVE — https://licensevault.vercel.app**, verified against the live URL 2026-10-12 |
-| BUILD 9 | Submission | ⬜ NOT STARTED |
+| BUILD 9 | Submission | ⏳ **IN PROGRESS — PHASE 1 PASS 2026-10-13** (`ebb4dca`). The build order's PHASE 1–8 *is* this build. **PHASE 1 PASS:** the proxy's size cap is now enforced *while streaming* (it was `await upstream.text()` and then a length check — a measurement, not a limit); and the partials claim is settled by a **real licensed read through the deployed proxy**, which watched `/dkg/cdr_partials` go from "none yet" to **5 real submissions in round 46** and then decrypted the committed blob to the recorded `sha256 46cab4a8…`. 151 tests. PHASE 2 (browser adapter) is next. |
 
 Legend: ⬜ not started · ⏳ in progress · ✅ PASS · 🚫 BLOCKED · ❌ FAILED
 
