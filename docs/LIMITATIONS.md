@@ -1,7 +1,7 @@
 # LIMITATIONS
 
 **Project:** LicenseVault
-**Last updated:** 2026-10-05
+**Last updated:** 2026-10-13
 
 Anyone judging this project should read this page. It states what LicenseVault does not do,
 so the claims in `docs/CLAIM_STATUS.md` are not read as broader than they are.
@@ -78,6 +78,28 @@ progress bar.
 **Explorer links.** The canonical Aeneid explorer URL is `UNVERIFIED`. Until it is
 confirmed, the Proof surface shows identifiers without links. Fabricating an explorer URL
 from a transaction hash is forbidden by the build contract.
+
+**The browser read flow is not implemented yet.** The live page verifies the licence and stops
+there. This is **an implementation gap, not an architectural one**, and the distinction matters
+because an earlier version of this file got it wrong in both directions:
+
+- It said a browser read needs "a funded account". A CDR read **is** fee-bearing, but it is signed
+  by a `walletClient` — the *visitor's own wallet*. That is the correct signer, not a secret we
+  hold, and paying for your own read is exactly what a wallet is for. No key of ours goes near it.
+- It said the keeper API sits on "a private-range IP a deployed server cannot reach".
+  `172.192.41.96` is a **public IP**, and the deployment **does** reach it — measured, not assumed.
+
+The genuine barrier was that the keeper API is plain HTTP and an HTTPS page cannot call it. That is
+now closed by `app/api/cdr/[...path]/route.ts`, which terminates TLS on our origin and forwards to
+the keeper over a constrained, allowlisted path. So what remains before the page can perform a real
+protected read and decrypt is UI work. Until it lands, the strongest state the site can reach is
+`LICENSE VERIFIED` and it never prints `ACCESS GRANTED`. Full correction: `docs/SECURITY.md` §5.
+
+**The server-to-keeper leg is still plain HTTP.** The browser talks HTTPS to our origin and our
+origin talks plain HTTP to the keeper. Confidentiality of the recovered content does not depend on
+that leg (partials are ECIES-encrypted to an ephemeral reader key, and tampering fails closed at the
+outermost AES-GCM check), but its **availability** does: an adversary on that path, or the endpoint
+simply moving, can deny a read. Reported here rather than described as solved.
 
 **No caching of authority.** Because `RESET` returns to `LOCKED`, a page refresh
 re-verifies. This is deliberate — stale cached authorization is a listed threat — but it

@@ -34,7 +34,7 @@ does not exist and is not fabricated.** The reason is in category 11.
 | 5 | Typography | **2** | Newsreader display / IBM Plex Sans UI / IBM Plex Mono data, as locked; `h1` at 68px desktop falling to 40px mobile inside the locked 56–68px band, and the supporting sentence at 17px measuring **36 characters per line**, inside the brief's ~45. | `desktop-locked.png` |
 | 6 | Spacing / density | **2** | No horizontal overflow at any of six viewports, docket padding holds at 320px, and the address field shrinks (604px → 222px) rather than widening its container, so density survives the narrowest screen. | `narrow-locked.png` |
 | 7 | Signature interaction | **2** | The signature interaction is the product: submitting an address performs a real `eth_call` to the vault's read condition on Aeneid and returns ALLOWED for the licence holder and DENIED for everyone else — measured live, and it costs no key, no gas and no signature. | `desktop-verified.png` |
-| 8 | State coverage | **1** | Five of the seven states are reachable and photographed (LOCKED, CHECKING, LICENSE VERIFIED, NO LICENSE, VERIFICATION ERROR); **`ACCESSING` and `ACCESS GRANTED` exist in the machine but cannot be reached from the browser**, because the protected read needs a funded account and the CDR keeper API. Scored 1, not 2 — see 11. | `desktop-verified.png`, `desktop-no-license.png`, `desktop-verification-error.png` |
+| 8 | State coverage | **1** | Five of the seven states are reachable and photographed (LOCKED, CHECKING, LICENSE VERIFIED, NO LICENSE, VERIFICATION ERROR); **`ACCESSING` and `ACCESS GRANTED` exist in the machine but are not yet reachable from the browser**, because the browser read flow is not wired up. Scored 1, not 2 — see 11. | `desktop-verified.png`, `desktop-no-license.png`, `desktop-verification-error.png` |
 | 9 | Motion | **1** | `prefers-reduced-motion` is honoured and the busy state is legible, but there is no state *transition* between LOCKED and LICENSE VERIFIED — the docket changes in place with no gesture marking the change. Honest score: the motion that exists is correct and there is not much of it. | `desktop-verified.png` |
 | 10 | Mobile | **1** | 390×844 and 320×844 both render with no horizontal scroll and the docket action reachable and enabled; scored 1 because the header measures **87px at 320px** against the locked 64–72px — a deliberate trade recorded below, not an oversight. | `mobile-locked.png`, `narrow-locked.png` |
 | 11 | Technical honesty | **2** | The strongest claim the page can make is `LICENSE VERIFIED`; it never prints `ACCESS GRANTED`, because the check verifies the licence and does not decrypt. A malformed request surfaces as `VERIFICATION ERROR` and never as `NO LICENSE` — pinned by a test whose comment says why: *"If it surfaced as `NO_LICENSE`, this product would tell a paying licensee they hold no rights because of a bug on our side of the wire."* | `desktop-verification-error.png` |
@@ -49,9 +49,16 @@ does not exist and is not fabricated.** The reason is in category 11.
 ### 8 — state coverage
 
 `ACCESSING` and `ACCESS GRANTED` are real states in `lib/access/state.ts` and are exercised by
-`tests/state.test.ts`. They are unreachable from the browser because reaching them requires the
-actual confidential read: a funded Aeneid account, and the CDR keeper API, which is plain HTTP on a
-private-range IP (`http://172.192.41.96:1317`) that a deployed server cannot reach.
+`tests/state.test.ts`. They are not yet reachable from the browser because the browser read flow is
+not implemented — the route that would carry it exists and is verified, but nothing calls it yet.
+
+> **Corrected 2026-10-13.** This paragraph used to give two reasons and both were wrong. It said the
+> read needs "a funded Aeneid account" — the read is fee-bearing, but it is signed by the visitor's
+> own wallet, so the funded account is the *user's*, which is exactly who should be paying. And it
+> said the keeper API is "plain HTTP on a private-range IP that a deployed server cannot reach" —
+> `172.192.41.96` is a public IP, and Vercel reaches it (verified). The transport barrier was real
+> and is now closed by `app/api/cdr/[...path]/route.ts`. What is left is implementation.
+> `docs/SECURITY.md` §5 has the full correction.
 
 The tempting move is to fake a decryption so the last two states can be photographed. That is the
 one thing this project exists not to do, and the brief says so twice — *"Don't manufacture

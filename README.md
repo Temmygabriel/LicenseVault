@@ -19,10 +19,20 @@ deployed server with **no key, no gas and no signature**.
 
 Being precise about what that means: the page verifies **the licence**, it does not decrypt. The
 end-to-end unlock — a real read that returns a data key, then content decrypted byte for byte — was
-executed on live Aeneid and is recorded in `evidence/licensevault-aeneid-001/`, but it needs a funded
-signer and so runs from the CLI harness, not from the browser. The strongest state the site can
+executed on live Aeneid and is recorded in `evidence/licensevault-aeneid-001/`, and it ran from the
+CLI harness. The browser read path is **not wired up yet**, so the strongest state the site can
 reach is `LICENSE VERIFIED`, and it will never print `ACCESS GRANTED` without a real decryption
 succeeding. See `docs/LIMITATIONS.md`.
+
+> **Correction, 2026-10-13.** This paragraph used to say the unlock "needs a funded signer and so
+> runs from the CLI harness, not from the browser." That was **wrong**. A CDR read is fee-bearing,
+> but it is signed by a `walletClient` — the user's own wallet — so it is exactly the kind of
+> operation a browser is supposed to perform, and no key of ours belongs anywhere near it. The
+> decryption needs no persistent key either: the SDK generates an ephemeral keypair and zeroes it
+> after use. The real blocker was that the CDR keeper API is plain HTTP, which a HTTPS page cannot
+> call; `app/api/cdr/[...path]/route.ts` now proxies it over TLS, verified reachable from the
+> deployment. What is missing is implementation work in the UI, not an architectural impossibility.
+> `docs/SECURITY.md` §5 has the full correction.
 
 ---
 

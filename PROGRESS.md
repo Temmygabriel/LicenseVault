@@ -119,11 +119,31 @@ before believing a layout number.
 
 - **No wallet connector.** *(Closed in the second pass — see below. A browser wallet can now supply
   the address, and pasting one works with no wallet at all.)*
-- **The CDR keeper API is plain HTTP on a private-range IP** (`http://172.192.41.96:1317`). A
-  deployed server almost certainly cannot reach it, which means a *live* read from a deployed build
-  would surface as `INFRASTRUCTURE_FAILURE` — never as `NO_LICENSE`. That is the correct behaviour
-  (an unreachable dependency is not a verdict about the user) but it must be documented rather than
-  discovered. Tracked as the §7 risk; must be resolved before BUILD 9.
+- **The CDR keeper API is plain HTTP** (`http://172.192.41.96:1317`). *(Partly wrong when written,
+  and **resolved 2026-10-13** — see the correction below. The transport gap was real; the
+  "private-range IP a deployed server cannot reach" half was not.)* The live read would have
+  surfaced as `INFRASTRUCTURE_FAILURE` rather than `NO_LICENSE`, which is the correct behaviour (an
+  unreachable dependency is not a verdict about the user) — but that is no longer the state of
+  things: `app/api/cdr/[...path]/route.ts` now proxies the keeper over TLS, and reachability **from
+  Vercel** is measured, not assumed.
+
+> **CORRECTED 2026-10-13.** Two claims that stood in this file, and in `docs/SECURITY.md`,
+> `docs/VISUAL_QA.md`, `docs/LIMITATIONS.md` and `README.md`, were wrong:
+>
+> 1. **"`172.192.41.96` is a private-range IP a deployed server cannot reach."** `172.192` is
+>    *outside* `172.16.0.0/12`, so it is a public IP — and Vercel reaches it. Verified:
+>    `/api/cdr/dkg/global_public_key` returns `code=200` from the live deployment, and
+>    `/dkg/latest_active` comes back **byte-identical to the direct call** (1352 bytes).
+> 2. **"The read needs a funded key, which must never exist in a browser."** The read *is*
+>    fee-bearing — `read()` submits a `writeContract` with `value: fee` — but it is signed by a
+>    **`walletClient`**, so the account that pays is the *visitor's own wallet*. That is the correct
+>    signer, and it is the whole point of wallet-connect. The decryption needs no persistent key
+>    either: `accessCDR` generates an **ephemeral secp256k1 keypair and zeroes the private key after
+>    use**. So the path needs zero long-lived secrets on our side.
+>
+> Both errors pointed the same way — they made the browser unlock look architecturally impossible
+> when it was merely unimplemented. What is missing now is UI work, not a way around a wall.
+> `docs/SECURITY.md` §5 carries the full correction and the measured evidence.
 
 ---
 
@@ -131,11 +151,14 @@ before believing a layout number.
 
 **The problem this half exists to solve:** the first pass produced a page with a disabled button
 and an honest sentence underneath it. An honest sentence is not a demo. The obvious fix — "wire up
-a wallet and call the flow" — runs straight into three walls: reading a sealed record needs a
-private key and gas; the CDR keeper API that co-ordinates the read is plain HTTP on a private-range
-IP a deployed server cannot reach; and the brief forbids showing `ACCESS GRANTED` for anything short
-of the real decryption. Wiring the wallet naively would have produced a button that works on this
-laptop and fails in front of a judge.
+a wallet and call the flow" — runs straight into three walls: reading a sealed record needs gas; the
+CDR keeper API that co-ordinates the read is plain HTTP, so an HTTPS page cannot call it; and the
+brief forbids showing `ACCESS GRANTED` for anything short of the real decryption. Wiring the wallet
+naively would have produced a button that works on this laptop and fails in front of a judge.
+
+*(Two of those three walls turned out to be lower than they looked — see the correction above. The
+second is now closed by the TLS proxy; the first was never a wall, because the signer is the
+visitor's own wallet.)*
 
 ### The observation that unlocked it
 
@@ -281,10 +304,12 @@ actually produce is a drawing.
 
 The brief's §9 list asks for **"Desktop 1440×900: real unlocked result with recovered content"**.
 **`desktop-unlocked.png` does not exist.** Reaching `ACCESS GRANTED` needs the actual confidential
-read: a funded Aeneid account and the CDR keeper API, which is plain HTTP on a private-range IP that
-a deployed server cannot reach. The brief says twice not to manufacture states, so the file is
-**declared absent** in `docs/VISUAL_QA.md` rather than omitted quietly or faked. It becomes
-producible with the §7 keeper-API work.
+read, and the browser read flow is not implemented yet. *(An earlier version of this line said it
+needs "a funded Aeneid account and the CDR keeper API, which is plain HTTP on a private-range IP
+that a deployed server cannot reach" — both halves wrong; see the 2026-10-13 correction above.)*
+The brief says twice not to manufacture states, so the file is **declared absent** in
+`docs/VISUAL_QA.md` rather than omitted quietly or faked. The transport it needs is now in place
+(`app/api/cdr/[...path]/route.ts`); what remains is the read flow itself.
 
 ### Scored 1 in exactly three places, all non-trigger, each for a stated reason
 
@@ -536,11 +561,19 @@ viewports were measured again against the rebuilt server — **every figure iden
 
 ### What is still not true, said plainly
 
-**The deployment does not unlock anything, and cannot.** It verifies the licence and stops. The
-protected read is fee-bearing and needs a funded signer, which must never exist in a browser or in a
-public deployment. So the strongest state the live site can reach is `LICENSE VERIFIED` — never
-`ACCESS GRANTED` — and `qa-screens/` still has no unlocked screenshot, because there is nothing
-honest to photograph.
+**The deployment does not unlock anything yet.** It verifies the licence and stops. That is an
+implementation gap, not an architectural one — see the correction below. So the strongest state the
+live site can reach is `LICENSE VERIFIED` — never `ACCESS GRANTED` — and `qa-screens/` still has no
+unlocked screenshot, because there is nothing honest to photograph.
+
+> **CORRECTED 2026-10-13.** This section used to say the protected read "is fee-bearing and needs a
+> funded signer, which must never exist in a browser or in a public deployment." **The premise is
+> right and the conclusion was wrong.** The read is fee-bearing, but it is signed by a
+> `walletClient`, and the account that pays is the *visitor's own wallet* — not a key we hold, not a
+> key we ask for. The decryption needs no persistent key at all: the SDK generates an ephemeral
+> keypair and zeroes it after use. The actual blocker was that the CDR keeper API is plain HTTP and
+> an HTTPS page cannot call it; `app/api/cdr/[...path]/route.ts` now proxies it over TLS and is
+> verified reachable from the deployment. Full correction in `docs/SECURITY.md` §5.
 
 ---
 
@@ -1322,8 +1355,12 @@ and avoids depending on unreleased `main`-branch code.
   Proof Receipt is read from the committed artifacts, not typed in), and the page **can** now ask
   the chain a real question: whether a given address holds the licence this vault's condition names.
   That is a free `view` call, so it needs no key, no gas and no keeper API. What the page still
-  cannot do is **perform the read and decrypt** — that path needs a funded account and the CDR
-  keeper API, which is plain HTTP on a private-range IP. So the strongest thing on the page is
+  cannot do is **perform the read and decrypt** — that path needs the CDR keeper API, which is plain
+  HTTP, so an HTTPS page cannot call it. (An earlier version of this line said it also "needs a
+  funded account"; that part was wrong — the read is signed by the visitor's own wallet, which is
+  the correct signer. Corrected 2026-10-13.) The keeper API is now proxied over TLS by
+  `app/api/cdr/[...path]/route.ts` and verified reachable from the deployment, so what remains is
+  UI implementation rather than a transport gap. Until that lands, the strongest thing on the page is
   `LICENSE VERIFIED`, never `ACCESS GRANTED`, and the copy says so. BUILD 3 re-checks the JSON from
   the chain, and the UI flow consumes the *same* gate rule and the *same* failure classifier as the
   harness rather than re-deriving them.

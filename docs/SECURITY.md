@@ -139,14 +139,16 @@ These are guaranteed by types, not by discipline:
 
 ---
 
-## 5. Open security issue — the CDR Story-API endpoint
+## 5. The CDR Story-API endpoint — resolved 2026-10-13
 
-**Severity: low–medium. Status: OPEN. Exposure: availability, not confidentiality.**
+**Severity: low–medium. Status: TRANSPORT RESOLVED, HOSTED PATH VERIFIED.** Exposure was
+availability, not confidentiality. What follows is kept in order, because the two wrong turns in
+it are the useful part.
 
 The Story-API REST endpoint documented by the CDR SDK is `http://172.192.41.96:1317` —
-**plain HTTP on a raw IP**. The current official docs confirm this is still the only Aeneid
-value, label it "Plain HTTP. May change between deployments.", and advise pointing `apiUrl`
-at your own node's REST gateway for production.
+**plain HTTP on a raw IP**. The official docs confirm this is still the only Aeneid value, label
+it "Plain HTTP. May change between deployments.", and advise pointing `apiUrl` at your own node's
+REST gateway for production.
 
 ### Measured 2026-10-12 — it is reachable, and it is PUBLIC
 
@@ -164,14 +166,88 @@ That last line is the decisive one: a *live application error naming a required 
 timeout, not a connection refusal, not a Go 404 from a dead port. Something real is serving CDR
 there. No reverse DNS, which is normal for cloud hosts.
 
-**What this changes.** Reachability was never the blocker for doing the protected read from a
-deployed server; the plain-HTTP transport is (below). Whether a Vercel serverless function can
-reach it is still unconfirmed and is a BUILD 8 measurement, not an assumption — but the prior is
-now "probably yes" rather than "no".
+### Corrected 2026-10-13 — the second wrong turn: "it needs a key in the browser"
 
-**What it does not change.** The browser still cannot do the full unlock, for a different reason:
-the read is fee-bearing, so it needs a funded account, and that key must not exist in the browser.
-That is the real design constraint, and `docs/LIMITATIONS.md` records it.
+The paragraph that used to sit here said the browser could never do the full unlock because *"the
+read is fee-bearing, so it needs a funded account, and that key must not exist in the browser."*
+
+**The first half is right and the conclusion is wrong.** Read from the pinned package
+(`@piplabs/cdr-sdk@0.2.2`, `dist/commonjs/consumer.js`), `read()` does:
+
+```js
+const fee = params.feeOverride ?? await this.publicClient.readContract({
+  address: cdrAddress, abi: cdrAbi, functionName: "readFee" });
+await this.preflightBalance(fee);
+txHash = await safeWriteContract(this.walletClient, this.publicClient, {
+  address: cdrAddress, abi: cdrAbi, functionName: "read",
+  args: [params.uuid, params.accessAuxData, params.requesterPubKey], value: fee });
+```
+
+So the read **is** fee-bearing — and it is signed by a **`walletClient`**, which is exactly the
+object a browser wallet provides. The SDK's own type says how little is required
+(`client-types.d.ts`):
+
+```ts
+export interface CDRWalletClient {
+  account?: { address: `0x${string}` } | `0x${string}` | null;
+  chain?: unknown;
+  writeContract(args: unknown): Promise<`0x${string}`>;
+}
+```
+
+A viem wallet client over `window.ethereum` satisfies that in four lines. The account paying the
+fee is **the user's own account** — which is not a key we hold, not a key we ask for, and not a
+key that has to exist anywhere near our servers. It is the license holder's own signature, which
+is precisely the property `docs/LIMITATIONS.md` and audit §1.3 ask for.
+
+**And there is no key to custody even for the decryption.** `accessCDR` is documented: *"If
+`requesterPubKey`/`recipientPrivKey` are omitted, an ephemeral secp256k1 keypair is generated and
+the private key is zeroed after use."* So the reader's key is ephemeral and in-process by design.
+The whole path needs **zero long-lived secrets** — no server key, no `NEXT_PUBLIC_*` key, no
+persisted reader key.
+
+The claim conflated a *server* key with the *user's own wallet*, and then drew an
+impossibility from it. It was wrong, it survived into two documents, and the CDR proxy below is
+the proof it was wrong.
+
+### Resolved 2026-10-13 — the transport, and the verified hosted path
+
+The real blocker was always narrower than either wrong turn suggested: **the endpoint is plain
+HTTP, and a page served over HTTPS cannot call it** — the browser blocks the request as mixed
+content before it leaves the tab.
+
+`app/api/cdr/[...path]/route.ts` closes it. It terminates TLS on our own origin and forwards to
+the keeper; the browser then calls `/api/cdr/...` same-origin. It is deliberately not an open
+proxy: the upstream is a module constant never derived from the request, only the six `/dkg/*`
+paths the SDK calls are forwarded from an exact table, only the parameters each endpoint declares
+are copied, GET is the only method, and no inbound header crosses — not `cookie`, not
+`authorization`. Every test asserts on **what was actually sent upstream**, since a route that
+refuses after fetching would already have leaked reach.
+
+**Reachability from the deployed host was measured, not assumed** — which audit §4.1 explicitly
+requires, because local reachability proves nothing about Vercel's network:
+
+| Endpoint, via `https://licensevault.vercel.app/api/cdr` | Result |
+|---|---|
+| `/dkg/global_public_key` | `code=200`, `cd262522f2b25d3d…` — byte-identical to the direct call |
+| `/dkg/latest_active` | `code=200`, round **46**, 20 validators |
+| `/dkg/dkg_network?round=46` | `code=200` |
+| `/dkg/registrations?round=46` | `code=200`, 5 registrations |
+| `/dkg/registrations/verified?round=46` | `code=200` |
+| `/dkg/cdr_partials?uuid=11062&…` | keeper's own `code=500` validation error — the parameters arrived and were processed |
+| `/dkg/latest_active` vs the keeper directly | **byte-identical, 1352 bytes** |
+| `/shutdown`, `/dkg/../../admin`, `/etc/passwd` | `404`, not forwarded |
+| `POST` | `405` |
+
+**What is still open, stated plainly:** the hop from Vercel to the keeper is plain HTTP over the
+public internet. Our origin is HTTPS on both sides of the browser, so the mixed-content block is
+gone — but the *server-to-keeper* leg is not encrypted, and the SDK's own docs say it "trusts the
+keeper at the same level as any other authoritative chain RPC read." A hostile network on that
+leg can read queries and deny availability; it cannot forge content (see the table below). Closing
+that leg means running our own `:1317` gateway or a TLS terminator in front of it — infrastructure
+we do not have on a $0 budget, and honestly reported as such rather than described as solved.
+
+**What this unlocks.** The browser can now reach every endpoint the protected read needs.
 
 **The endpoint is in the trust path — this is stated by the SDK, not inferred.** The published
 `Consumer` docs say partials come from `/dkg/cdr_partials`, that the keeper verifies each
@@ -205,15 +281,19 @@ reports come from the per-round cache, so this adds no request. **Decision defer
 BUILD 8** — it hardens against a dishonest validator, which is a related but distinct concern
 from a dishonest transport, and it is not needed to demonstrate the mechanism.
 
-**Planned resolution (BUILD 9, before deployment).**
-1. Test reachability from a Vercel serverless function.
-2. If reachable only over plain HTTP, run our own node's `:1317` REST gateway, or front the
-   endpoint with TLS on infrastructure we control.
-3. Re-read the docs at `docs.datafdn.org` (note: `docs.story.foundation` currently serves an
+**Resolution taken (2026-10-13).** Option 2 — front the endpoint with TLS on infrastructure we
+control — is what `app/api/cdr/[...path]/route.ts` does, using the deployment we already have
+rather than new infrastructure. Options 1 and 3 remain open as follow-ups:
+
+1. ✅ **Test reachability from a Vercel serverless function** — done, reachable, table above.
+2. ✅ **Front the endpoint with TLS on infrastructure we control** — done, the proxy route.
+3. ⬜ Re-read the docs at `docs.datafdn.org` (note: `docs.story.foundation` currently serves an
    **expired certificate**) to check whether an official TLS endpoint has appeared.
 
-**Per build-spec §7: if neither is viable, the correct outcome is to report `BLOCKED`, not to
-invent a workaround.** That instruction is recorded here so it survives to BUILD 9.
+**Per build-spec §7: if neither were viable, the correct outcome would be to report `BLOCKED`,
+not to invent a workaround.** They were viable, so the read path is not blocked — but the
+remaining plain-HTTP server-to-keeper leg is reported here rather than glossed, and a reader
+should treat the availability property above as still unmitigated.
 
 ---
 
