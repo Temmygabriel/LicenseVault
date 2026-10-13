@@ -31,6 +31,7 @@ import { EXPECTED_CHAIN_ID, createAeneidPublicClient } from "@/lib/protocol/clie
 import { encodeLicenseAccessAuxData } from "@/lib/protocol/conditions";
 import { probeReadCondition } from "@/lib/protocol/gate";
 import { redactInfrastructureDetail } from "@/lib/access/redact";
+import { clientKey, createLimiter } from "@/lib/access/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,80 +77,20 @@ function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// A small per-client limiter.
+// The outbound-call budget.
 //
-// This endpoint makes an outbound RPC call on every request, which makes it a way to spend
-// somebody else's rate limit. The call itself cannot be redirected — the contract address is
-// fixed in `canonical-vault.ts` and the caller supplies only a wallet address — so this is
-// about availability, not about reach.
-//
-// ⚠️ THIS IS NOT A SECURITY BOUNDARY, AND MUST NOT BE DESCRIBED AS ONE (BUILD 7).
-//
-// The per-client key comes from `x-forwarded-for`, which a caller can set to anything when the
-// app is not behind a proxy that overwrites it. Vary the header and the per-client budget is
-// bypassed entirely. That is tolerable only because nothing is being protected by it — the
-// product's authorization decision is made by the chain, not by this counter — and because the
-// process-wide cap below still bounds the total outbound calls regardless of what any caller
-// claims about itself. A real per-client limit belongs at the edge; see `docs/SECURITY.md`.
+// This endpoint makes an RPC call on every request, which makes it a way to spend somebody
+// else's rate limit. The call itself cannot be redirected — the contract address is fixed in
+// `canonical-vault.ts` and the caller supplies only a wallet address — so this is about
+// availability, not about reach. `lib/access/rate-limit.ts` carries the full warning about what
+// this counter is and is not; the short version is that it is not a security boundary.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const WINDOW_MS = 60_000;
-const MAX_PER_WINDOW = 12;
-
-/**
- * A ceiling on the whole process, not on one claimed client.
- *
- * This is the part spoofing cannot get around: however many `x-forwarded-for` values a caller
- * invents, the instance will not exceed this many outbound probes per window. It exists so that
- * the honest-looking per-client brake cannot be turned into an unbounded one by lying.
- */
-const MAX_GLOBAL_PER_WINDOW = 240;
-
-/** Header values are attacker-controlled, so the map key is bounded rather than trusted. */
-const MAX_KEY_LENGTH = 64;
-
-const attempts = new Map<string, number[]>();
-const globalAttempts: number[] = [];
-
-function prune(times: number[], now: number): number[] {
-  return times.filter((at) => now - at < WINDOW_MS);
-}
-
-function withinBudget(key: string, now: number): boolean {
-  const recent = prune(attempts.get(key) ?? [], now);
-  if (recent.length >= MAX_PER_WINDOW) {
-    attempts.set(key, recent);
-    return false;
-  }
-  recent.push(now);
-  attempts.set(key, recent);
-  // Keep the map from growing without bound on a long-lived instance.
-  if (attempts.size > 5_000) {
-    for (const [candidate, times] of attempts) {
-      if (times.every((at) => now - at >= WINDOW_MS)) attempts.delete(candidate);
-    }
-  }
-  return true;
-}
-
-function withinGlobalBudget(now: number): boolean {
-  const recent = prune(globalAttempts, now);
-  if (recent.length >= MAX_GLOBAL_PER_WINDOW) return false;
-  recent.push(now);
-  globalAttempts.length = 0;
-  globalAttempts.push(...recent);
-  return true;
-}
-
-/** `Request` has no `ip`; the header the platform sets is the only signal available. */
-function clientKey(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  const raw =
-    forwarded !== null && forwarded.length > 0
-      ? (forwarded.split(",")[0]?.trim() ?? "unknown")
-      : (request.headers.get("x-real-ip") ?? "unknown");
-  return raw.slice(0, MAX_KEY_LENGTH);
-}
+const limiter = createLimiter({
+  windowMs: 60_000,
+  maxPerWindow: 12,
+  maxGlobalPerWindow: 240,
+});
 
 export async function POST(request: Request): Promise<NextResponse> {
   let body: unknown;
@@ -178,7 +119,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const wallet = getAddress(addressInput);
 
   const now = Date.now();
-  if (!withinBudget(clientKey(request), now) || !withinGlobalBudget(now)) {
+  if (!limiter.check(clientKey(request), now).allowed) {
     return respond(
       {
         error:
