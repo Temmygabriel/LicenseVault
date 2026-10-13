@@ -19,7 +19,9 @@
     "spike:vault": "tsx tools/spike/build-vault.ts",
     "ui:audit": "node tools/ui-audit.mjs",
     "ui:overflow": "node tools/overflow-probe.mjs",
-    "ui:capture": "node tools/ui-capture.mjs"
+    "ui:capture": "node tools/ui-capture.mjs",
+    "verify:transport": "tsx tools/verify-cdr-transport.ts",
+    "verify:read": "tsx tools/verify-live-read.ts"
   },
   "dependencies": {
     "@piplabs/cdr-contracts": "0.2.2",

@@ -1,0 +1,175 @@
+Yes. Proceed directly with the real browser read flow, using the current LicenseVault repository and the audit plan already committed to the repo.
+
+Do not spend more time arguing whether the architecture is possible. Implement it and prove it.
+
+My goal is a complete, working, judge-ready product—not another partial implementation, a simulated unlock, or a page that only checks an address.
+
+Explain the work and results in language a 15-year-old can understand. Make no guesses about protocol facts. Research current official sources when needed and record unknowns as UNVERIFIED. Do not claim completion without the required evidence.
+
+## PHASE 1 — Finish the proxy audit
+
+Before building on the new `/api/cdr/[...path]` route:
+
+1. Keep its fixed upstream, exact endpoint allowlist, query-parameter allowlist, GET-only policy, credential isolation, timeout and failure redaction.
+2. Fix the response-size limit. The route currently buffers the full response with `await upstream.text()` before checking the 512 KB limit, and `body.length` is not a byte count. Enforce the limit while consuming the upstream stream, count actual bytes and cancel the reader if the cap is exceeded.
+3. Add tests for oversized responses, upstream timeouts, malformed responses, query manipulation, encoded traversal, and ensuring no rejected request causes an upstream fetch.
+4. Verify that the browser client and the published CDR SDK can use the relative API base `/api/cdr` correctly.
+5. Preserve the SDK-required response envelope. Do not unwrap the keeper response twice.
+6. Keep all errors fail-closed. A keeper error, timeout, malformed partial or decryption failure must never become NO LICENSE or ACCESS GRANTED.
+
+The current probe of `/dkg/cdr_partials` returned an HTTP 500 validation error. Do not describe that as proof that partial retrieval works. The actual SDK-generated partial request must succeed through the deployed proxy.
+
+## PHASE 2 — Implement the real browser CDR adapter
+
+Create `lib/protocol/cdr-browser.ts` or an equivalent clean protocol adapter.
+
+Requirements:
+
+- Use the published, pinned SDK versions already in the repository unless a verified compatibility problem requires a change.
+- Initialize the SDK's WASM support correctly in the browser.
+- Prevent server-side rendering from importing browser-only providers or executing browser-only initialization.
+- Use a viem public client for the verified Aeneid RPC and a wallet client backed by the user's injected EVM provider.
+- Use the same-origin `/api/cdr` endpoint for the CDR Story-API requests.
+- Use the existing canonical vault, license condition, token ID, IP identifier and auxiliary-data encoding. Derive them from the existing source of truth; do not duplicate or guess them.
+- Do not use a server private key to impersonate the visitor.
+- Keep SDK imports and protocol calls out of UI components. The components should call the adapter and render the resulting typed states.
+- Check the actual connected wallet and chain before attempting a transaction.
+- Read the current on-chain fee and wallet balance where relevant. Never assume a read costs nothing merely because the current protocol fee is zero.
+
+First, prove the adapter works with a real connected Aeneid wallet on a real protected read. If browser bundling, WASM initialization or the SDK fails, investigate and fix the actual cause. Do not replace the operation with a mock.
+
+## PHASE 3 — Make the wallet experience understandable
+
+The interface should use a wallet-first flow.
+
+When no wallet is connected, show a clear primary action such as CONNECT WALLET. Do not prompt for a connection or signature automatically on page load.
+
+After connection, show the actual wallet address and current network in the Access Docket. Handle account changes, chain changes, disconnects, rejected wallet requests and insufficient testnet funds.
+
+If the wallet is on the wrong network, explain the issue and offer a verified network-switch path. Verify the current Aeneid RPC, chain ID, explorer and native currency information from official sources before configuring automatic network addition.
+
+The connected wallet must be the address that signs the read transaction. Do not allow a manually pasted address to masquerade as the connected signer.
+
+Manual address verification may remain as a separate read-only demonstration feature, but it must never grant the visitor an unlock for somebody else's address.
+
+Make the difference clear between checking a license, signing the actual protected read, waiting for decryption and displaying recovered content. No fake progress percentage.
+
+## PHASE 4 — Complete the REAL license-to-unlock journey
+
+The existing evidence proves that a license token was minted to a particular testnet wallet and that a recorded authorized read decrypted the protected payload. That is valuable evidence, but the judge must be able to understand and use the live product.
+
+Investigate whether the existing zero-minting-fee Commercial Use terms permit a fresh user to mint the actual license token through the supported current Story SDK.
+
+If the live protocol permits self-service minting under those terms, add a minimal, clearly labelled GET DEMO LICENSE action. The visitor's connected wallet must sign the real mint transaction, and the application must wait for confirmation and verify the resulting license against chain state.
+
+If minting requires an unavailable permission, fee or other prerequisite, stop and report the exact blocker and evidence. Do not fabricate a license, bypass an authorization requirement or add a hidden server signer.
+
+Then implement and prove this exact sequence:
+
+1. Connect a wallet that holds no license.
+2. Attempt the real protected read and demonstrate an actual on-chain denial.
+3. Obtain the correct license using the real supported mechanism, if the protocol permits it.
+4. Verify the resulting license on chain.
+5. Submit the actual CDR read transaction using the connected wallet.
+6. Wait for the transaction to confirm.
+7. Retrieve the real threshold-decryption partials through the deployed same-origin proxy.
+8. Recover the real data key using the SDK.
+9. Decrypt the actual protected ciphertext and verify the recovered bytes against the expected content hash.
+10. Display the recovered Commercial Brand Asset Pack in the product interface.
+11. Show the resulting on-chain proof and a clear explanation of why access opened.
+
+If any prerequisite fails, report the exact failure instead of substituting a recorded result for a new live operation.
+
+## PHASE 5 — Preserve correct state and error handling
+
+Use the existing state machine. Extend it only where necessary, with typed events and evidence.
+
+Maintain these distinctions:
+
+- NO LICENSE: the real licensing condition refused the read.
+- VERIFICATION ERROR: the system could not establish a reliable answer.
+- LICENSE VERIFIED: the real licensing check succeeded, but the content has not necessarily been decrypted.
+- ACCESSING: the real protected read/decryption is in progress.
+- ACCESS GRANTED / UNLOCKED: the actual protected content has been recovered and validated.
+
+A successful license check alone must never trigger ACCESS GRANTED.
+
+Also distinguish wallet cancellation, wrong network, insufficient balance, failed transaction, malformed request, partial-collection timeout and decryption failure. Never turn these into a license denial.
+
+The ephemeral decryption key must not be persisted in local storage, server logs, evidence files or repository artifacts. Display the real recovered content only after decryption has succeeded.
+
+## PHASE 6 — Finish the product UI without redesigning it
+
+Retain the existing Licensed Archive art direction and Access Docket. The current cream canvas, editorial Newsreader heading, IBM Plex typography, thin document rules and restrained copper accent are the approved design direction.
+
+Do not replace it with a generic Web3 dashboard. Do not add a marketplace, AI assistant, analytics dashboard, tokenomics or unrelated pages.
+
+Improve only the areas required for the real interaction:
+
+- a useful wallet connection and network status;
+- a clean transaction-confirmation sequence;
+- honest waiting, error and retry states;
+- a visible reveal of the actual recovered content;
+- a connected proof receipt for the new live transaction;
+- clear mobile and keyboard-accessible controls.
+
+When a user has no license, provide an actual supported path to obtain the license if one is available, instead of merely inviting them to retry the same check.
+
+Keep the recorded-run proof clearly labelled as historical evidence. Do not mix historical transactions into a new live run as though they all happened in that session.
+
+## PHASE 7 — Test the whole flow, not just isolated pieces
+
+Run and report:
+
+- `npm run lint`
+- `npm run typecheck`
+- `npm test`
+- `npm run build`
+- GitHub Actions / CI status
+
+Add integration coverage for wallet connection, wrong chain, rejected wallet prompts, actual read success and denial, proxy partial retrieval, WASM initialization, decryption, content-hash validation and error classification.
+
+Then test the production deployment, not just localhost.
+
+The production acceptance test must show a real authorized wallet signing a CDR read on Aeneid, real partial retrieval through `/api/cdr`, successful decryption and the protected content displayed in the browser. Save honest evidence, including actual transaction hashes and verified explorer links.
+
+Do not claim the flow is production-verified if it was only tested locally.
+
+## PHASE 8 — Documentation, cost and chain-transition risk
+
+Update the README, PROGRESS.md, SECURITY.md, LIMITATIONS.md, CLAIM_STATUS.md, EVIDENCE.md and UX_TEST.md to reflect the implementation that actually exists.
+
+Remove or clearly label stale build-status statements. The public repository must tell one consistent story.
+
+Verify all testnet requirements against official sources. This build must not require mainnet assets, paid infrastructure or a paid API subscription. A visitor may need free testnet tokens to cover transaction gas; explain that before the transaction and never imply that zero protocol fees means no gas is required.
+
+The DATA Foundation / Sui transition is a real strategic risk. Do not migrate LicenseVault to Sui automatically in this phase. Verify the official transition timeline and whether Aeneid will remain usable throughout the judging window. Record the decision and evidence. If the existing network is no longer viable for the required live demo, stop and report the blocker before attempting a different architecture.
+
+## FINAL GATE
+
+Do not report this build as complete merely because lint, tests, typecheck, build and deployment pass.
+
+The product is ready only when a judge can understand it and the live browser can demonstrate a genuine license-gated read, recover the protected content and verify why the content opened.
+
+Finish with a phase report containing:
+
+PHASE:
+STATUS: PASS / BLOCKED / FAILED
+COMMIT:
+FILES CHANGED:
+TESTS:
+CI:
+LIVE URL:
+CONNECTED WALLET FLOW:
+LICENSE ACQUISITION:
+LIVE READ TRANSACTION:
+PARTIAL RETRIEVAL:
+DECRYPTION AND CONTENT-HASH RESULT:
+SECURITY FINDINGS:
+COST / TESTNET REQUIREMENTS:
+LIVE EVIDENCE:
+KNOWN LIMITATIONS:
+BLOCKERS:
+NEXT STEP:
+
+Proceed with the proxy correction and then the real browser flow. Work in small, verifiable changes, keep the build free of paid dependencies, and never claim more than the evidence establishes.

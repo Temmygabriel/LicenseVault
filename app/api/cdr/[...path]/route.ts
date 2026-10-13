@@ -94,6 +94,70 @@ const UPSTREAM_TIMEOUT_MS = 10_000;
 const MAX_RESPONSE_BYTES = 512 * 1024;
 
 /**
+ * Read a response body, stopping the moment it exceeds `cap`.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WHY THIS IS NOT `await response.text()`
+ *
+ * The first version of this route buffered the whole body and then checked its length. That is
+ * not a limit, it is a measurement taken after the damage: an upstream that streams 4 GB gets to
+ * write all 4 GB into the function's memory before the check runs, and the check is the thing
+ * that was supposed to prevent it. The cap has to be enforced *while consuming the stream*.
+ *
+ * Two further corrections, both of which would have made the first cap wrong even if it had been
+ * enforced:
+ *
+ *   • `body.length` on a string is a count of **UTF-16 code units, not bytes**. A body of
+ *     multi-byte characters passes a byte cap it should fail, by up to 3×.
+ *   • `reader.cancel()` matters as much as the `return`. Returning early without cancelling
+ *     leaves the upstream connection open and still producing; the bytes keep arriving and keep
+ *     being discarded, which is the same resource cost with none of the visibility.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+async function readCapped(
+  response: Response,
+  cap: number,
+): Promise<{ body: string; exceeded: boolean }> {
+  const stream = response.body;
+  if (stream === null) return { body: "", exceeded: false };
+
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value === undefined) continue;
+
+      total += value.byteLength; // real bytes
+      if (total > cap) {
+        await reader.cancel(); // stop the upstream, do not just stop reading it
+        return { body: "", exceeded: true };
+      }
+      chunks.push(value);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // A locked reader is already being torn down with the response; nothing to do.
+    }
+  }
+
+  // Assemble without `Buffer`, so this stays runtime-agnostic if the route ever moves to edge.
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return { body: new TextDecoder("utf-8").decode(merged), exceeded: false };
+}
+
+/**
  * Bound the outbound fetches. This route reaches a fixed upstream, so the limit is about
  * availability rather than reach — but it is a shared keeper, and this product should not be the
  * reason it falls over. See `lib/access/rate-limit.ts` for what this counter is and is not.
@@ -163,9 +227,9 @@ export async function GET(
       cache: "no-store",
     });
 
-    const body = await upstream.text();
+    const { body, exceeded } = await readCapped(upstream, MAX_RESPONSE_BYTES);
 
-    if (body.length > MAX_RESPONSE_BYTES) {
+    if (exceeded) {
       return envelopeError(
         502,
         `The keeper returned more than ${MAX_RESPONSE_BYTES} bytes, which is larger than any ` +
@@ -175,8 +239,11 @@ export async function GET(
 
     return new NextResponse(body, {
       status: upstream.status,
+      // The upstream's own type when it declared one, so a keeper that answers `text/plain` on a
+      // Go 404 is not relabelled as JSON by us. Our own error exits above are always JSON,
+      // because the SDK's parser needs a parseable body to tell a keeper fault from ours.
       headers: {
-        "content-type": "application/json",
+        "content-type": upstream.headers.get("content-type") ?? "application/json",
         "cache-control": "no-store, max-age=0",
       },
     });
