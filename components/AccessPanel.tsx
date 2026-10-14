@@ -48,7 +48,7 @@ export function AccessPanel({ assetName, assetSublabel, licenseRequired, network
 }) {
   const {
     state, walletAddress, walletChainId, operation, busy, problem, technicalDetail,
-    mintedTokenId, selectedTokenId, mintTxHash, readTxHash, deniedReadTxHash,
+    mintedTokenId, selectedTokenId, licenseTokenIdInput, licenseTokenIdInputValid, setLicenseTokenIdInput, mintTxHash, readTxHash, deniedReadTxHash,
     manifest, manifestJson, plaintextHash, nativeBalance, protocolReadFee,
     connectWallet, switchToAeneid, verifyLicense, mintDemoLicense, tryLockedRead,
     unlockProtectedContent, retry, downloadRecoveredManifest,
@@ -74,7 +74,7 @@ export function AccessPanel({ assetName, assetSublabel, licenseRequired, network
     if (denied) return { label: "Get demo license", onActivate: () => void mintDemoLicense() };
     if (phase === "VERIFICATION_ERROR") return { label: "Retry verification", onActivate: () => void retry() };
     return { label: "Check license", onActivate: () => void verifyLicense(), disabled: !licenseTokenIdInputValid, reason: "Enter a valid decimal license token ID before checking access." };
-  }, [busy, busyLabel, connected, correctNetwork, unlocked, phase, denied, connectWallet, switchToAeneid, downloadRecoveredManifest, unlockProtectedContent, mintDemoLicense, retry, verifyLicense, licenseTokenIdInputValid]);
+  }, [busy, busyLabel, connected, correctNetwork, unlocked, phase, denied, connectWallet, switchToAeneid, downloadRecoveredManifest, unlockProtectedContent, mintDemoLicense, retry, verifyLicense, licenseTokenIdInput]);
 
   const currentNetworkLabel = walletChainId === null ? "Wallet not connected" :
     walletChainId === AENEID_CHAIN_ID ? networkLabel : `Wrong network · chain ${walletChainId} (expected ${AENEID_CHAIN_ID})`;

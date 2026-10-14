@@ -130,7 +130,7 @@ export async function mintDemoLicenseForWallet(address: Address): Promise<DemoLi
   // fee and fail closed before asking the visitor to sign if it is non-zero or unknown.
   const feeQuote = await story.license.predictMintingLicenseFee({
     licensorIpId: CANONICAL_VAULT.ipId,
-    licenseTermsId: CANONICAL_VAULT.licenseTermsId.toString(),
+    licenseTermsId: BigInt(CANONICAL_VAULT.licenseTermsId),
     amount: 1,
     receiver,
   }) as unknown as Record<string, unknown>;
@@ -146,7 +146,7 @@ export async function mintDemoLicenseForWallet(address: Address): Promise<DemoLi
 
   const rawResult = await story.license.mintLicenseTokens({
     licensorIpId: CANONICAL_VAULT.ipId,
-    licenseTermsId: CANONICAL_VAULT.licenseTermsId.toString(),
+    licenseTermsId: BigInt(CANONICAL_VAULT.licenseTermsId),
     receiver,
     amount: 1,
     maxMintingFee: 1n,
