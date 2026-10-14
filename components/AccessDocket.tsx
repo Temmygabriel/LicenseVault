@@ -32,6 +32,8 @@ export interface DocketAction {
   reason?: string;
   /** True while the real work is in flight, so the control cannot be fired twice. */
   busy?: boolean;
+  /** Disable a connected action until its additional input is valid. */
+  disabled?: boolean;
   /**
    * When set, the button submits this form instead of calling `onActivate` directly.
    *
@@ -57,24 +59,18 @@ export interface AccessDocketProps {
   /** Compact network badge for the docket header — `Aeneid · Testnet`. */
   networkBadge: string;
   action: DocketAction;
-  /** The address field and its explanations, when the flow is wired. */
+  /** Short pre-action guidance inside the docket. */
   children?: ReactNode;
+  /** Progress, recovered content and session-specific proof shown after the primary action. */
+  footer?: ReactNode;
+  /** Anchor target for hero CTAs. */
+  id?: string;
 }
 
-function actionLabelFor(state: AccessState, fallback: string): string {
-  switch (state.phase) {
-    case "CHECKING":
-      return "Verifying License";
-    case "ACCESSING":
-      return "Accessing";
-    case "UNLOCKED":
-      return "Open Protected Asset";
-    case "VERIFICATION_ERROR":
-    case "NO_LICENSE":
-      return "Try Again";
-    default:
-      return fallback;
-  }
+function actionLabelFor(fallback: string): string {
+  // The caller owns the label for each real operation. A fixed generic override here would
+  // hide "Connect wallet", "Get demo license" and "Download recovered manifest".
+  return fallback;
 }
 
 export function AccessDocket({
@@ -88,9 +84,11 @@ export function AccessDocket({
   networkBadge,
   action,
   children,
+  footer,
+  id = "access-docket",
 }: AccessDocketProps) {
   const copy = statusCopy(state.phase);
-  const label = actionLabelFor(state, action.label);
+  const label = actionLabelFor(action.label);
   const wired = action.onActivate !== undefined || action.formId !== undefined;
 
   if (!wired && action.reason === undefined) {
@@ -103,7 +101,7 @@ export function AccessDocket({
   }
 
   return (
-    <article className="docket" aria-labelledby="docket-heading">
+    <article className="docket" id={id} aria-labelledby="docket-heading">
       <div className="docket__header">
         <h2 className="docket__title" id="docket-heading">
           LicenseVault <span aria-hidden="true">/</span> Access Docket
@@ -157,7 +155,7 @@ export function AccessDocket({
           form={action.formId}
           onClick={action.formId === undefined ? action.onActivate : undefined}
           className="action action--block"
-          disabled={!wired || action.busy === true}
+          disabled={!wired || action.disabled === true || action.busy === true}
           aria-busy={action.busy === true}
           aria-describedby="docket-action-note"
         >
@@ -166,10 +164,11 @@ export function AccessDocket({
         <p className="docket__note" id="docket-action-note">
           {copy.sentence}
         </p>
-        {!wired && action.reason !== undefined ? (
+        {(!wired || action.disabled === true) && action.reason !== undefined ? (
           <p className="docket__reason">{action.reason}</p>
         ) : null}
       </div>
+      {footer !== undefined ? <div className="docket__footer">{footer}</div> : null}
     </article>
   );
 }

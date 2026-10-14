@@ -1,9 +1,10 @@
 import Link from "next/link";
 
 import { AccessPanel } from "@/components/AccessPanel";
+import { HeroActions } from "@/components/HeroActions";
 import { AccessProvider } from "@/components/AccessProvider";
 import { ProofReceipt } from "@/components/ProofReceipt";
-import { VaultMark } from "@/components/ProtectedAsset";
+import { ArchiveHeroArt, VaultMark } from "@/components/ProtectedAsset";
 import { WalletChip } from "@/components/WalletChip";
 import { loadProofReceipt } from "@/lib/evidence/receipt";
 import {
@@ -14,24 +15,9 @@ import {
 import styles from "./page.module.css";
 
 /**
- * Landing surface.
- *
- * ─────────────────────────────────────────────────────────────────────────────
- * WHAT IS REAL ON THIS PAGE, AND WHAT IS NOT
- *
- * Real, and read from the chain when you press the button: the license check. It sends the
- * address you give it to `/api/verify-license`, which performs one real `eth_call` to the
- * vault's read condition on Story Aeneid — the same condition contract the recorded run
- * exercised. No key, no signature, no gas.
- *
- * Real, and read from the committed artifacts: the Proof Receipt. Every row in it comes from
- * `lib/evidence/receipt.ts`, and every transaction hash in it was re-checked against Aeneid by
- * the independent verifier before it was published.
- *
- * Not performed here: the protected read. Decrypting needs the license holder's key and the CDR
- * keeper network, so the strongest thing this page can reach is LICENSE VERIFIED. It never
- * shows ACCESS GRANTED, because it has not opened anything.
- * ─────────────────────────────────────────────────────────────────────────────
+ * Landing surface. The visual system is the Licensed Archive: editorial, precise and quiet.
+ * The client interaction is a real wallet → license → protected-read flow. The historical
+ * receipt is kept visibly separate from any transaction performed in the current session.
  */
 export default function Home() {
   const receipt = loadProofReceipt();
@@ -73,15 +59,24 @@ export default function Home() {
               <h1 className={`display ${styles.headline}`}>A license should open the door.</h1>
 
               <p className={styles.supporting}>
-                LicenseVault connects an onchain IP license to real access permission for
-                protected content. The content stays sealed until the read is allowed.
+                A creator&apos;s license becomes a real access condition. Connect your wallet, verify
+                the right, then sign a protected read. The content opens only after the browser
+                recovers it and checks its integrity.
               </p>
 
-              <a className={styles.propositionLink} href="#how-it-works">
-                How it works
-              </a>
+              <HeroActions />
+
+              <ArchiveHeroArt className={styles.heroArt} />
+
+              <ul className={styles.proofPoints} aria-label="LicenseVault principles">
+                <li><span aria-hidden="true">01</span><strong>Onchain decision</strong><small>The contract decides.</small></li>
+                <li><span aria-hidden="true">02</span><strong>Protected read</strong><small>Encrypted until allowed.</small></li>
+                <li><span aria-hidden="true">03</span><strong>Verifiable proof</strong><small>Real transaction evidence.</small></li>
+              </ul>
+
               <p className={styles.propositionHint}>
-                The protocol condition decides access — not a flag in this page.
+                Connecting does not sign or spend anything. The protected read requires a separate
+                wallet approval and may use testnet gas.
               </p>
             </section>
 
@@ -144,7 +139,16 @@ export default function Home() {
             </p>
           </section>
 
-          <div id="proof">
+          <div id="proof" className={styles.evidence}>
+            <section className={styles.evidenceIntro} aria-labelledby="evidence-heading">
+              <p className="label">Proof, not a promise</p>
+              <h2 className={`display ${styles.evidenceTitle}`} id="evidence-heading">The record behind the result.</h2>
+              <p>
+                Your current session&apos;s mint/read transactions appear in the Access Docket. The
+                receipt below is a separately labelled historical Aeneid run, independently
+                checked against the chain.
+              </p>
+            </section>
             {receipt !== null ? (
               <ProofReceipt receipt={receipt} />
             ) : (
@@ -164,8 +168,8 @@ export default function Home() {
         <footer className={styles.footer}>
           <div className={styles.footerInner}>
             <p className={styles.footerNote}>
-              A demonstration build on Story Aeneid testnet. The protected asset is fictional; the
-              run recorded above is real.
+              Aeneid testnet demonstration. The protected payload is an encrypted delivery
+              manifest; the listed brand files are manifest entries, not delivered binaries.
             </p>
             <p className={styles.footerContext}>{networkLabel}</p>
           </div>

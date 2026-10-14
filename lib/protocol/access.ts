@@ -42,11 +42,24 @@ export type AccessAttempt =
   /** The vault returned a data key. The ONLY shape that may be shown as granted. */
   | { kind: "GRANTED"; dataKey: Uint8Array; txHash: Hex }
   /** The protocol evaluated the caller's licence and refused. Safe to display as restricted. */
-  | { kind: "REFUSED"; basis: string }
+  | { kind: "REFUSED"; basis: string; txHash?: Hex }
   /** The request was not well-formed, so the protocol never judged the caller. Never a denial. */
   | { kind: "MALFORMED_REQUEST"; basis: string }
   /** We could not establish a trustworthy result. Never a denial, never a grant. */
   | { kind: "INFRASTRUCTURE_FAILURE"; detail: string; cause?: unknown };
+
+/**
+ * Extract the read transaction hash from the SDK's typed reverted-read error when available.
+ * Error objects are untrusted here; validate the shape before it reaches a proof receipt.
+ */
+function readTxHashFromError(error: unknown): Hex | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const record = error as Record<string, unknown>;
+  const candidate = record["txHash"] ?? record["transactionHash"];
+  return typeof candidate === "string" && /^0x[0-9a-f]{64}$/i.test(candidate)
+    ? candidate as Hex
+    : undefined;
+}
 
 /**
  * Classify a thrown error from the read path.
@@ -56,16 +69,26 @@ export type AccessAttempt =
  */
 export function classifyReadFailure(error: unknown): AccessAttempt {
   const detail = error instanceof Error ? error.message : String(error);
-  const lower = detail.toLowerCase();
+  const record = typeof error === "object" && error !== null ? error as Record<string, unknown> : {};
+  const errorText = [
+    detail,
+    record["revertReason"],
+    record["reason"],
+    record["shortMessage"],
+    record["details"],
+  ].filter((part): part is string => typeof part === "string").join(" ");
+  const lower = errorText.toLowerCase();
 
   // The protocol reached the condition contract and it said no. This is the single
   // authorization signal, and it is quoted from the contract's own revert reason.
   if (lower.includes(READ_CONDITION_NOT_MET.toLowerCase())) {
+    const txHash = readTxHashFromError(error);
     return {
       kind: "REFUSED",
       basis:
         "read() reverted with the CDR contract's own reason, \"" + READ_CONDITION_NOT_MET +
         "\" — the read condition evaluated the caller's licence and refused.",
+      ...(txHash === undefined ? {} : { txHash }),
     };
   }
 

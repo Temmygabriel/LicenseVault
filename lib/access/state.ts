@@ -84,6 +84,8 @@ export interface RejectionEvidence {
    * with ConditionNotMet".
    */
   basis: string;
+  /** Optional actual reverted CDR read transaction hash, when exposed by the SDK. */
+  readTxHash?: Hex;
   checkedAt: string;
 }
 
@@ -118,6 +120,7 @@ export type AccessEvent =
   | { type: "VERIFICATION_FAILED"; failure: Failure }
   | { type: "READ_REQUESTED" }
   | { type: "PLAINTEXT_RECOVERED"; evidence: UnlockEvidence }
+  | { type: "READ_REFUSED"; evidence: RejectionEvidence }
   | { type: "RESET" };
 
 export const INITIAL_ACCESS_STATE: AccessState = { phase: "LOCKED" };
@@ -258,6 +261,12 @@ export function reduceAccess(state: AccessState, event: AccessEvent): AccessStat
         evidence: state.evidence,
         startedAt: new Date().toISOString(),
       };
+
+    case "READ_REFUSED":
+      if (state.phase !== "CHECKING" && state.phase !== "ACCESSING") {
+        throw new IllegalTransitionError(state.phase, event.type);
+      }
+      return { phase: "NO_LICENSE", evidence: event.evidence };
 
     case "PLAINTEXT_RECOVERED":
       if (state.phase !== "ACCESSING") {
