@@ -527,7 +527,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   const finishWithRecoveredContent = useCallback(
     async (wallet: Address, attempt: Extract<AccessAttempt, { kind: "GRANTED" }>) => {
       setReadTxHash(attempt.txHash);
-      let dataKey = attempt.dataKey;
+      const dataKey = attempt.dataKey
       try {
         const sealed = await fetchSealedContent();
         const plaintext = await decryptContentInBrowser(sealed, dataKey);

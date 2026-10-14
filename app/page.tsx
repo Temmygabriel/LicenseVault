@@ -144,7 +144,7 @@ export default function Home() {
               <p className="label">Proof, not a promise</p>
               <h2 className={`display ${styles.evidenceTitle}`} id="evidence-heading">The record behind the result.</h2>
               <p>
-                Your current session's mint/read transactions appear in the Access Docket. The
+                Your current session&apos;s mint/read transactions appear in the Access Docket. The
                 receipt below is a separately labelled historical Aeneid run, independently
                 checked against the chain.
               </p>

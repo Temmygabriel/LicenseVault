@@ -126,12 +126,30 @@ export async function mintDemoLicenseForWallet(address: Address): Promise<DemoLi
     chainId: AENEID_CHAIN_ID,
   });
 
+  // A zero maxMintingFee in the Story SDK means "no cap", not "free". Query the live
+  // fee and fail closed before asking the visitor to sign if it is non-zero or unknown.
+  const feeQuote = await story.license.predictMintingLicenseFee({
+    licensorIpId: CANONICAL_VAULT.ipId,
+    licenseTermsId: CANONICAL_VAULT.licenseTermsId.toString(),
+    amount: 1,
+    receiver,
+  }) as unknown as Record<string, unknown>;
+  let quotedFee: bigint;
+  try {
+    quotedFee = BigInt(String(feeQuote["tokenMintingFee"]));
+  } catch {
+    throw new Error("The current mint fee could not be verified. No mint transaction was submitted.");
+  }
+  if (quotedFee !== 0n) {
+    throw new Error("The licensing contract quotes a non-zero mint fee. No demo-license mint was submitted; request a free license instead.");
+  }
+
   const rawResult = await story.license.mintLicenseTokens({
     licensorIpId: CANONICAL_VAULT.ipId,
     licenseTermsId: CANONICAL_VAULT.licenseTermsId.toString(),
     receiver,
     amount: 1,
-    maxMintingFee: 0n,
+    maxMintingFee: 1n,
     maxRevenueShare: 100,
   });
 
