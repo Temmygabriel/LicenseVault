@@ -32,6 +32,8 @@ export interface DocketAction {
   reason?: string;
   /** True while the real work is in flight, so the control cannot be fired twice. */
   busy?: boolean;
+  /** Disable a connected action until its additional input is valid. */
+  disabled?: boolean;
   /**
    * When set, the button submits this form instead of calling `onActivate` directly.
    *
@@ -153,7 +155,7 @@ export function AccessDocket({
           form={action.formId}
           onClick={action.formId === undefined ? action.onActivate : undefined}
           className="action action--block"
-          disabled={!wired || action.busy === true}
+          disabled={!wired || action.disabled === true || action.busy === true}
           aria-busy={action.busy === true}
           aria-describedby="docket-action-note"
         >
@@ -162,7 +164,7 @@ export function AccessDocket({
         <p className="docket__note" id="docket-action-note">
           {copy.sentence}
         </p>
-        {!wired && action.reason !== undefined ? (
+        {(!wired || action.disabled === true) && action.reason !== undefined ? (
           <p className="docket__reason">{action.reason}</p>
         ) : null}
       </div>

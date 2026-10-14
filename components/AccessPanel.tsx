@@ -73,8 +73,8 @@ export function AccessPanel({ assetName, assetSublabel, licenseRequired, network
     if (phase === "LICENSE_VERIFIED") return { label: "Sign protected read", onActivate: () => void unlockProtectedContent() };
     if (denied) return { label: "Get demo license", onActivate: () => void mintDemoLicense() };
     if (phase === "VERIFICATION_ERROR") return { label: "Retry verification", onActivate: () => void retry() };
-    return { label: "Check license", onActivate: () => void verifyLicense() };
-  }, [busy, busyLabel, connected, correctNetwork, unlocked, phase, denied, connectWallet, switchToAeneid, downloadRecoveredManifest, unlockProtectedContent, mintDemoLicense, retry, verifyLicense]);
+    return { label: "Check license", onActivate: () => void verifyLicense(), disabled: !licenseTokenIdInputValid, reason: "Enter a valid decimal license token ID before checking access." };
+  }, [busy, busyLabel, connected, correctNetwork, unlocked, phase, denied, connectWallet, switchToAeneid, downloadRecoveredManifest, unlockProtectedContent, mintDemoLicense, retry, verifyLicense, licenseTokenIdInputValid]);
 
   const currentNetworkLabel = walletChainId === null ? "Wallet not connected" :
     walletChainId === AENEID_CHAIN_ID ? networkLabel : `Wrong network · chain ${walletChainId} (expected ${AENEID_CHAIN_ID})`;
@@ -103,6 +103,26 @@ export function AccessPanel({ assetName, assetSublabel, licenseRequired, network
 
   const footer = (
     <div className="access-workflow">
+      <div className="token-entry">
+        <label className="label" htmlFor="license-token-id">License token ID</label>
+        <input
+          id="license-token-id"
+          className="token-entry__input mono"
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          spellCheck={false}
+          value={licenseTokenIdInput}
+          onChange={(event) => setLicenseTokenIdInput(event.currentTarget.value)}
+          disabled={busy}
+          aria-invalid={!licenseTokenIdInputValid}
+          aria-describedby="license-token-help"
+        />
+        <p id="license-token-help">
+          Check a token you already own for this asset. The field starts with the published demo token #73227 so judges can reproduce the recorded proof. If you do not have a license, use <strong>Get demo license</strong> after the check is refused.
+        </p>
+        {!licenseTokenIdInputValid ? <p className="token-entry__error" role="alert">Enter a non-negative decimal token ID (digits only, up to 256 bits).</p> : null}
+      </div>
       <div className="access-workflow__heading"><div><p className="label">Access sequence</p><h3 className="access-workflow__title">From license to readable content</h3></div><span className="access-workflow__count">5 checkpoints</span></div>
       <ol className="journey-list" aria-label="LicenseVault access steps">
         <Step number="01" title="Connect wallet" detail="Your address; no signature on connection." status={steps[0]} />

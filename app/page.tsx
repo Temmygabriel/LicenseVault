@@ -59,7 +59,7 @@ export default function Home() {
               <h1 className={`display ${styles.headline}`}>A license should open the door.</h1>
 
               <p className={styles.supporting}>
-                A creator's license becomes a real access condition. Connect your wallet, verify
+                A creator&apos;s license becomes a real access condition. Connect your wallet, verify
                 the right, then sign a protected read. The content opens only after the browser
                 recovers it and checks its integrity.
               </p>

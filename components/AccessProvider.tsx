@@ -30,6 +30,8 @@ import {
   INITIAL_ACCESS_STATE,
   reduceAccess,
   classifyThrownError,
+  type AccessEvent,
+  type AccessPhase,
   type AccessState,
   type Failure,
   type RejectionEvidence,
@@ -39,6 +41,7 @@ import { CANONICAL_VAULT } from "@/lib/protocol/canonical-vault";
 import {
   AENEID_CHAIN_ID,
   AENEID_FAUCET_URL,
+  AENEID_RPC_URL,
   CDR_ADDRESS,
   PROTECTED_ASSET_NAME,
 } from "@/lib/protocol/constants";
@@ -89,6 +92,9 @@ interface AccessContextValue {
   technicalDetail: string | null;
   mintedTokenId: bigint | null;
   selectedTokenId: bigint;
+  licenseTokenIdInput: string;
+  licenseTokenIdInputValid: boolean;
+  setLicenseTokenIdInput: (value: string) => void;
   mintTxHash: Hex | null;
   readTxHash: Hex | null;
   deniedReadTxHash: Hex | null;
@@ -186,13 +192,14 @@ function isManifest(value: unknown): value is ProtectedManifest {
 }
 
 export function AccessProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reduceAccess, INITIAL_ACCESS_STATE);
+  const [state, reactDispatch] = useReducer(reduceAccess, INITIAL_ACCESS_STATE);
   const [walletAddress, setWalletAddress] = useState<Address | null>(null);
   const [walletChainId, setWalletChainId] = useState<number | null>(null);
   const [operation, setOperation] = useState<AccessOperation>("idle");
   const [problem, setProblem] = useState<string | null>(null);
   const [technicalDetail, setTechnicalDetail] = useState<string | null>(null);
   const [mintedTokenId, setMintedTokenId] = useState<bigint | null>(null);
+  const [licenseTokenIdInput, setLicenseTokenIdInputState] = useState(String(CANONICAL_VAULT.licenseTokenId));
   const [mintTxHash, setMintTxHash] = useState<Hex | null>(null);
   const [readTxHash, setReadTxHash] = useState<Hex | null>(null);
   const [deniedReadTxHash, setDeniedReadTxHash] = useState<Hex | null>(null);
@@ -202,14 +209,43 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   const [nativeBalance, setNativeBalance] = useState<string | null>(null);
   const [protocolReadFee, setProtocolReadFee] = useState<string | null>(null);
   const inFlight = useRef(false);
-  const phaseRef = useRef(state.phase);
-  phaseRef.current = state.phase;
-  const stateRef = useRef<AccessState>(state);
-  stateRef.current = state;
+  const phaseRef = useRef<AccessPhase>(INITIAL_ACCESS_STATE.phase);
+  const stateRef = useRef<AccessState>(INITIAL_ACCESS_STATE);
   const gateWasDeniedRef = useRef(false);
+  const dispatch = useCallback((event: AccessEvent) => {
+    // Keep the synchronous guard state aligned with React's queued reducer transitions. This
+    // avoids duplicate or illegal transitions when a wallet callback fires before a rerender.
+    const nextState = reduceAccess(stateRef.current, event);
+    stateRef.current = nextState;
+    phaseRef.current = nextState.phase;
+    reactDispatch(event);
+  }, []);
+  useEffect(() => {
+    stateRef.current = state;
+    phaseRef.current = state.phase;
+  }, [state]);
 
-  const selectedTokenId = mintedTokenId ?? CANONICAL_VAULT.licenseTokenId;
+  const parsedInputTokenId =
+    /^(0|[1-9][0-9]*)$/.test(licenseTokenIdInput) && licenseTokenIdInput.length <= 78
+      ? BigInt(licenseTokenIdInput)
+      : null;
+  const licenseTokenIdInputValid = parsedInputTokenId !== null && parsedInputTokenId < (1n << 256n);
+  const selectedTokenId = mintedTokenId ?? (licenseTokenIdInputValid ? parsedInputTokenId : CANONICAL_VAULT.licenseTokenId);
   const busy = operation !== "idle";
+
+  const handleLicenseTokenIdInputChange = useCallback((value: string) => {
+    setLicenseTokenIdInputState(value);
+    setMintedTokenId(null);
+    setMintTxHash(null);
+    setProblem(null);
+    setTechnicalDetail(null);
+    setReadTxHash(null);
+    setDeniedReadTxHash(null);
+    setManifest(null);
+    setManifestJson(null);
+    setPlaintextHash(null);
+    if (!inFlight.current) dispatch({ type: "RESET" });
+  }, [dispatch]);
 
   const clearProofSession = useCallback(() => {
     setMintedTokenId(null);
@@ -227,7 +263,14 @@ export function AccessProvider({ children }: { children: ReactNode }) {
 
   const failActiveFlow = useCallback(
     (error: unknown, explicitDetail?: string) => {
-      const failure = classifyThrownError(error);
+      const failure: Failure =
+        error instanceof BrowserContentDecryptionError
+          ? {
+              kind: "DECRYPTION_FAILED",
+              detail: error.message,
+              cause: error,
+            }
+          : classifyThrownError(error);
       const detail = explicitDetail ?? (error instanceof Error ? error.message : String(error));
       const phase = phaseRef.current;
 
@@ -330,9 +373,34 @@ export function AccessProvider({ children }: { children: ReactNode }) {
           ? (error as { code?: unknown }).code
           : undefined;
       if (code === 4902) {
-        setProblem(
-          "Aeneid Testnet is not configured in this wallet. Add it using the official network details at docs.datafdn.org, then return here.",
-        );
+        try {
+          const provider = getProvider();
+          await provider.request({
+            method: "wallet_addEthereumChain",
+            params: [{
+              chainId: "0x523",
+              chainName: "Story Aeneid Testnet",
+              nativeCurrency: { name: "IP", symbol: "IP", decimals: 18 },
+              rpcUrls: [AENEID_RPC_URL],
+              blockExplorerUrls: ["https://aeneid.datanetscan.io"],
+            }],
+          });
+          await provider.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: "0x523" }],
+          });
+          const newChainId = await getInjectedChainId();
+          setWalletChainId(newChainId);
+          if (newChainId !== AENEID_CHAIN_ID) {
+            setProblem("Aeneid was added, but the wallet did not switch to it. Select Story Aeneid Testnet and retry.");
+            return;
+          }
+          dispatch({ type: "RESET" });
+          setProblem(null);
+        } catch (addError) {
+          setProblem(addError instanceof Error ? addError.message : "The wallet could not add Aeneid Testnet.");
+          setTechnicalDetail("NETWORK_CONFIGURATION");
+        }
       } else {
         const failure = classifyThrownError(error);
         setProblem(userFacingFailure(failure, error instanceof Error ? error.message : String(error)));
@@ -394,13 +462,17 @@ export function AccessProvider({ children }: { children: ReactNode }) {
 
   const verifyLicense = useCallback(async () => {
     if (inFlight.current) return;
+    if (!licenseTokenIdInputValid && mintedTokenId === null) {
+      setProblem("Enter a valid non-negative decimal license token ID.");
+      return;
+    }
     inFlight.current = true;
     try {
       await verifyLicenseInternal(selectedTokenId);
     } finally {
       inFlight.current = false;
     }
-  }, [selectedTokenId, verifyLicenseInternal]);
+  }, [licenseTokenIdInputValid, mintedTokenId, selectedTokenId, verifyLicenseInternal]);
 
   const mintDemoLicense = useCallback(async () => {
     if (inFlight.current) return;
@@ -413,6 +485,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       const result = await mintDemoLicenseForWallet(wallet);
       // The token ID and transaction are read from the actual SDK response and verified on chain.
       setMintedTokenId(result.tokenId);
+      setLicenseTokenIdInputState(String(result.tokenId));
       setMintTxHash(result.txHash);
       await verifyLicenseInternal(result.tokenId);
     } catch (error) {
@@ -508,6 +581,10 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   const performRead = useCallback(
     async (lockedGateTest: boolean) => {
       if (inFlight.current) return;
+      if (!licenseTokenIdInputValid && mintedTokenId === null) {
+        setProblem("Enter a valid non-negative decimal license token ID before testing access.");
+        return;
+      }
       inFlight.current = true;
       setOperation("reading");
       setProblem(null);
@@ -608,7 +685,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
         inFlight.current = false;
       }
     },
-    [finishWithRecoveredContent, failActiveFlow, preflightRead, selectedTokenId, currentWalletOnAeneid],
+    [finishWithRecoveredContent, failActiveFlow, preflightRead, selectedTokenId, currentWalletOnAeneid, licenseTokenIdInputValid, mintedTokenId],
   );
 
   const tryLockedRead = useCallback(async () => {
@@ -705,6 +782,9 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       technicalDetail,
       mintedTokenId,
       selectedTokenId,
+      licenseTokenIdInput,
+      licenseTokenIdInputValid,
+      setLicenseTokenIdInput: handleLicenseTokenIdInputChange,
       mintTxHash,
       readTxHash,
       deniedReadTxHash,
@@ -726,7 +806,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     }),
     [
       state, walletAddress, walletChainId, operation, busy, problem, technicalDetail,
-      mintedTokenId, selectedTokenId, mintTxHash, readTxHash, deniedReadTxHash,
+      mintedTokenId, selectedTokenId, licenseTokenIdInput, licenseTokenIdInputValid, handleLicenseTokenIdInputChange, mintTxHash, readTxHash, deniedReadTxHash,
       manifest, manifestJson, plaintextHash, nativeBalance, protocolReadFee,
       connectWallet, disconnectWallet, switchToAeneid, verifyLicense, mintDemoLicense,
       tryLockedRead, unlockProtectedContent, retry, downloadRecoveredManifest, resetFlow,

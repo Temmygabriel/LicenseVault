@@ -118,13 +118,10 @@ export async function mintDemoLicenseForWallet(address: Address): Promise<DemoLi
   }
 
   const { StoryClient } = await import("@story-protocol/core-sdk");
-  const walletClient = createWalletClient({
-    account: receiver,
-    chain: STORY_AENEID_BROWSER_CHAIN,
-    transport: custom(provider as never),
-  });
+  // StoryClient builds its viem WalletClient around the injected EIP-1193 transport. Passing
+  // the address selects the user's connected account without creating or storing a local signer.
   const story = StoryClient.newClient({
-    account: walletClient.account as never,
+    account: receiver,
     transport: custom(provider as never),
     chainId: AENEID_CHAIN_ID,
   });

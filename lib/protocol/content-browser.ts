@@ -48,9 +48,9 @@ export async function decryptContentInBrowser(
       ["decrypt"],
     );
     const plaintext = await globalThis.crypto.subtle.decrypt(
-      { name: "AES-GCM", iv, tagLength: TAG_BYTES * 8 },
+      { name: "AES-GCM", iv: ivBuffer, tagLength: TAG_BYTES * 8 },
       key,
-      ciphertextAndTag,
+      payloadBuffer,
     );
     return new Uint8Array(plaintext);
   } catch (error) {

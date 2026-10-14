@@ -19,7 +19,7 @@ const refusal: RejectionEvidence = {
   chainId: 1315,
   vaultUuid: 11062,
   basis: "The real CDR read reverted because the caller does not own the presented token.",
-  readTxHash: "0xaaec7f41637e65d4f6c55ce66d45399e1798b16716c7f7cfb1aa654ee23cdea9",
+  readTxHash: ("0x" + "aa".repeat(32)) as `0x${string}`,
   checkedAt: "2026-10-14T00:00:00.000Z",
 };
 
