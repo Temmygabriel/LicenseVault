@@ -1,53 +1,65 @@
 "use client";
 
-/**
- * The header wallet control.
- *
- * It reports the address the chain was actually asked about — not the draft in the input, and
- * not a connection the page invented. When no check has run it says so plainly instead of
- * implying a wallet is connected.
- *
- * It is a status, not a way in: this build reads an address and asks the chain about it. It
- * never requests a signature and never holds a key, so there is nothing here to "connect" in
- * the sense a wallet normally means.
- */
-
-import { useAccess } from "./AccessProvider";
 import { shortAddress } from "@/lib/format";
+import { useAccess } from "./AccessProvider";
 
 export interface WalletChipProps {
-  /** CSS-Module class names are `string | undefined` under `noUncheckedIndexedAccess`. */
-  className?: string | undefined;
-  dotClassName?: string | undefined;
-  /** Rendered before the state text; hidden on the narrowest screens to keep the header short. */
-  longClassName?: string | undefined;
+  className?: string;
+  dotClassName?: string;
+  longClassName?: string;
 }
 
+/** Wallet control: explicitly connect when signed out; report the real account when connected. */
 export function WalletChip({ className, dotClassName, longClassName }: WalletChipProps) {
-  const { checkedAddress, state } = useAccess();
+  const {
+    walletAddress,
+    walletChainId,
+    busy,
+    connectWallet,
+    disconnectWallet,
+  } = useAccess();
 
-  const working = state.phase === "CHECKING" || state.phase === "ACCESSING";
-
-  if (checkedAddress === null) {
+  if (walletAddress === null) {
     return (
-      <span className={className}>
+      <button
+        type="button"
+        className={`${className ?? ""} wallet-connect-control`}
+        onClick={() => void connectWallet()}
+        disabled={busy}
+        aria-busy={busy}
+      >
         <span className={dotClassName} aria-hidden="true" />
-        <span className={longClassName}>Wallet </span>not connected
-      </span>
+        <span>{busy ? "Connecting…" : <>Connect<span className={longClassName}> wallet</span></>}</span>
+      </button>
     );
   }
 
+  const networkText =
+    walletChainId === null
+      ? "Network not checked"
+      : walletChainId === 1315
+        ? "Aeneid Testnet"
+        : `Wrong network · ${walletChainId}`;
+
   return (
-    <span className={className} title={checkedAddress}>
-      <span className={dotClassName} aria-hidden="true" />
-      <span className={longClassName}>{working ? "Checking " : "Wallet "}</span>
-      <span className="mono" aria-hidden="true">
-        {shortAddress(checkedAddress)}
+    <div className="wallet-control-group">
+      <span className={className} title={walletAddress}>
+        <span className={dotClassName} aria-hidden="true" />
+        <span className={longClassName}>Wallet </span>
+        <span className="mono">{shortAddress(walletAddress)}</span>
+        <span className="visually-hidden">Full wallet address: {walletAddress}.</span>
+        <span className="wallet-network-label">{networkText}</span>
       </span>
-      <span className="visually-hidden">
-        {working ? "Checking " : "Wallet "}
-        {checkedAddress}
-      </span>
-    </span>
+      <button
+        type="button"
+        className="wallet-disconnect"
+        onClick={disconnectWallet}
+        disabled={busy}
+        aria-label="Disconnect LicenseVault's local session"
+        title="Disconnect this site session only"
+      >
+        Disconnect
+      </button>
+    </div>
   );
 }
