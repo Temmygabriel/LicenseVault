@@ -136,9 +136,18 @@ export async function mintDemoLicenseForWallet(address: Address): Promise<DemoLi
   }) as unknown as Record<string, unknown>;
   let quotedFee: bigint;
   try {
-    quotedFee = BigInt(String(feeQuote["tokenMintingFee"]));
+    // Story SDK v1.4.4 exposes the predicted amount as `tokenAmount` (currencyToken,
+    // tokenAmount). Older wrappers may expose `tokenMintingFee`. Read the documented field
+    // first, with a compatibility fallback; the previous code only read tokenMintingFee,
+    // so the valid SDK response became BigInt("undefined") and the wallet was never prompted.
+    const rawFee = feeQuote["tokenAmount"] ?? feeQuote["tokenMintingFee"];
+    if (rawFee === undefined || rawFee === null || (typeof rawFee !== "string" && typeof rawFee !== "number" && typeof rawFee !== "bigint")) {
+      throw new Error("Unexpected fee response shape");
+    }
+    quotedFee = BigInt(String(rawFee));
+    if (quotedFee < 0n) throw new Error("Negative fee");
   } catch {
-    throw new Error("The current mint fee could not be verified. No mint transaction was submitted.");
+    throw new Error("The current mint fee could not be verified from the Story SDK response. No mint transaction was submitted.");
   }
   if (quotedFee !== 0n) {
     throw new Error("The licensing contract quotes a non-zero mint fee. No demo-license mint was submitted; request a free license instead.");
