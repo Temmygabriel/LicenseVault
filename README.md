@@ -151,14 +151,17 @@ string or a `NEXT_PUBLIC_*PRIVATE_KEY` appears in tracked files.
 
 ---
 
-## Documents
+## Documentation
 
-- [`LICENSEVAULT_BUILD_SPEC.md`](./LICENSEVAULT_BUILD_SPEC.md) — the primary build contract
-- [`LICENSEVAULT_DEEPSEEK_MASTER_PROMPT.md`](./LICENSEVAULT_DEEPSEEK_MASTER_PROMPT.md) — agent operating rules
-- [`PROGRESS.md`](./PROGRESS.md) — live build state
-- [`docs/PROTOCOL_DISCOVERY.md`](./docs/PROTOCOL_DISCOVERY.md) — every verified protocol fact, with sources
-- [`docs/PROTOCOL_DECISION.md`](./docs/PROTOCOL_DECISION.md) — the technical choices and why
-- [`docs/CLAIM_STATUS.md`](./docs/CLAIM_STATUS.md) — what is proven, observed, inferred, and explicitly *not* claimed
+- [Architecture and protocol decisions](./docs/PROTOCOL_DECISION.md)
+- [Protocol discovery and sources](./docs/PROTOCOL_DISCOVERY.md)
+- [Security model and open risks](./docs/SECURITY.md)
+- [Evidence guide](./docs/EVIDENCE.md)
+- [Claim status](./docs/CLAIM_STATUS.md)
+- [Known limitations](./docs/LIMITATIONS.md)
+- [Asset provenance](./docs/ASSET_PROVENANCE.md)
+- [Test and visual QA reports](./docs/)
+
 
 ---
 
