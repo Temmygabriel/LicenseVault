@@ -51,6 +51,9 @@ jobs:
           NEXT_PUBLIC_STORY_CHAIN_ID: "1315"
           NEXT_PUBLIC_STORY_RPC_URL: "https://aeneid.storyrpc.io"
 
+      - name: Verify browser CDR WASM bundle
+        run: npm run verify:browser-cdr
+
   evidence-verification:
     name: independently verify the canonical run
     runs-on: ubuntu-latest
