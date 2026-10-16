@@ -1,7 +1,7 @@
 # LICENSEVAULT — LIVE BUILD PROGRESS
 
 > **This file is the running state of the project. It is updated at every phase boundary.**
-> Last updated: 2026-10-13 — **BUILD 9 (Submission) PHASE 1 PASS**; BUILD 8 remains live at https://licensevault.vercel.app
+> Last updated: 2026-10-16 — browser protected-read flow demonstrated on the live deployment
 >
 > There is a page a judge can open, and its one action performs a **real `eth_call` to the vault's
 > read condition on live Aeneid** — the licence holder gets `ALLOWED`, the contract owner gets
@@ -12,10 +12,7 @@
 > **22/24** in `docs/VISUAL_QA.md`, with one required screenshot declared absent rather than
 > fabricated.
 >
-> It is still deliberately incapable of printing `ACCESS GRANTED`: it verifies the *licence*, it does
-> not decrypt, and the section below says exactly why. BUILD 7 found that the public route was
-> handing anonymous callers the operator's RPC credential in an error message — confirmed live, now
-> redacted at the boundary and pinned by tests.
+The browser flow now goes beyond licence verification: a wallet-signed CDR read recovered the data key, decrypted the 804-byte JSON manifest in the browser, and matched the expected SHA-256 digest. The older phase notes below preserve historical findings; read them as dated snapshots, not the current implementation status.
 
 **Repo:** https://github.com/Temmygabriel/LicenseVault
 **Local:** `C:\Users\USER\Documents\HACKATHONS BUILDS\BLI_LEGALTECH_HACK\LICENSEVAULT`
@@ -64,8 +61,7 @@
 > request returns real submissions. That is the distinction the earlier claim collapsed, and it is
 > now the distinction the transport tool's own output states out loud.
 >
-> **What PHASE 1 does not prove:** that a *browser* can do this. That is PHASE 2, and it is not
-> claimed here.
+> **Historical note:** at the time this phase was written, it did not yet prove browser execution. The subsequent browser flow has now been demonstrated on the deployed app; see README.md and docs/EVIDENCE.md for the current scope and evidence distinctions.
 
 ---
 
