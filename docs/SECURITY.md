@@ -1,7 +1,7 @@
 # SECURITY MODEL
 
 **Project:** LicenseVault
-**Last updated:** 2026-10-12 (BUILD 7 — adversarial pass)
+**Last updated:** 2026-10-16 (CDR transport risk clarified)
 **Scope:** the MVP flow — one protected resource gated by one onchain licensing condition,
 plus the public `/api/verify-license` endpoint added in BUILD 5.
 
@@ -139,161 +139,42 @@ These are guaranteed by types, not by discipline:
 
 ---
 
-## 5. The CDR Story-API endpoint — resolved 2026-10-13
+## 5. CDR Story-API transport risk — OPEN
 
-**Severity: low–medium. Status: TRANSPORT RESOLVED, HOSTED PATH VERIFIED.** Exposure was
-availability, not confidentiality. What follows is kept in order, because the two wrong turns in
-it are the useful part.
+**Status: browser mixed-content workaround implemented; server-to-upstream transport remains unencrypted.**
 
-The Story-API REST endpoint documented by the CDR SDK is `http://172.192.41.96:1317` —
-**plain HTTP on a raw IP**. The official docs confirm this is still the only Aeneid value, label
-it "Plain HTTP. May change between deployments.", and advise pointing `apiUrl` at your own node's
-REST gateway for production.
+The documented Aeneid CDR Story-API endpoint is `http://172.192.41.96:1317`, which uses plain HTTP. The browser cannot call that endpoint directly from the HTTPS application because the browser blocks mixed content. LicenseVault's `app/api/cdr/[...path]/route.ts` provides a same-origin HTTPS route and forwards a constrained set of requests to the fixed upstream.
 
-### Measured 2026-10-12 — it is reachable, and it is PUBLIC
+That proxy **does not add TLS to the upstream connection**. The path is:
 
-An earlier note in this repo described this host as a private-IP endpoint that a deployed server
-could not reach. **That was wrong, and it was wrong in the direction that matters** — it made the
-full browser unlock look architecturally impossible when it is not. Measured:
-
-| Check | Result |
-|---|---|
-| `172.192.41.96` inside `172.16.0.0/12`? | ❌ **No.** `172.192` is outside the private range, so this is a **public IP**. |
-| Local interfaces | `10.120.8.238` only — the keeper is not a local alias faking reachability. |
-| `GET /dkg/cdr_partials` | **HTTP 500** in 0.92s: `{"code":500,"error":"requester_pub_key_hex is required"}` |
-
-That last line is the decisive one: a *live application error naming a required parameter*, not a
-timeout, not a connection refusal, not a Go 404 from a dead port. Something real is serving CDR
-there. No reverse DNS, which is normal for cloud hosts.
-
-### Corrected 2026-10-13 — the second wrong turn: "it needs a key in the browser"
-
-The paragraph that used to sit here said the browser could never do the full unlock because *"the
-read is fee-bearing, so it needs a funded account, and that key must not exist in the browser."*
-
-**The first half is right and the conclusion is wrong.** Read from the pinned package
-(`@piplabs/cdr-sdk@0.2.2`, `dist/commonjs/consumer.js`), `read()` does:
-
-```js
-const fee = params.feeOverride ?? await this.publicClient.readContract({
-  address: cdrAddress, abi: cdrAbi, functionName: "readFee" });
-await this.preflightBalance(fee);
-txHash = await safeWriteContract(this.walletClient, this.publicClient, {
-  address: cdrAddress, abi: cdrAbi, functionName: "read",
-  args: [params.uuid, params.accessAuxData, params.requesterPubKey], value: fee });
+```text
+Browser ── HTTPS ──> LicenseVault/Vercel proxy ── plain HTTP ──> CDR keeper
 ```
 
-So the read **is** fee-bearing — and it is signed by a **`walletClient`**, which is exactly the
-object a browser wallet provides. The SDK's own type says how little is required
-(`client-types.d.ts`):
+The proxy limits exposure with a fixed upstream, an explicit endpoint allowlist, per-endpoint query allowlists, GET-only forwarding, request-header isolation, response-size limits, timeouts, and error redaction. These controls reduce proxy abuse; they do not encrypt or authenticate the Vercel-to-keeper hop.
 
-```ts
-export interface CDRWalletClient {
-  account?: { address: `0x${string}` } | `0x${string}` | null;
-  chain?: unknown;
-  writeContract(args: unknown): Promise<`0x${string}`>;
-}
-```
+### What the open risk means
 
-A viem wallet client over `window.ethereum` satisfies that in four lines. The account paying the
-fee is **the user's own account** — which is not a key we hold, not a key we ask for, and not a
-key that has to exist anywhere near our servers. It is the license holder's own signature, which
-is precisely the property `docs/LIMITATIONS.md` and audit §1.3 ask for.
+A network observer or active intermediary on the server-to-keeper path may observe request metadata and can disrupt, delay, drop, or alter HTTP responses. The CDR SDK documents the keeper as a trusted part of its read path. Therefore LicenseVault does **not** claim end-to-end transport security, authenticated keeper responses, or protection against all active attacks on that hop.
 
-**And there is no key to custody even for the decryption.** `accessCDR` is documented: *"If
-`requesterPubKey`/`recipientPrivKey` are omitted, an ephemeral secp256k1 keypair is generated and
-the private key is zeroed after use."* So the reader's key is ephemeral and in-process by design.
-The whole path needs **zero long-lived secrets** — no server key, no `NEXT_PUBLIC_*` key, no
-persisted reader key.
+### What AES-GCM does — and does not — protect
 
-The claim conflated a *server* key with the *user's own wallet*, and then drew an
-impossibility from it. It was wrong, it survived into two documents, and the CDR proxy below is
-the proof it was wrong.
+The protected payload is encrypted with AES-256-GCM. After the SDK recovers a candidate data key, the browser decrypts the sealed payload and checks the authenticated ciphertext/tag. If the key, ciphertext, or authentication tag is corrupted, AES-GCM decryption fails and the application must not unlock the content. The app also compares the decrypted plaintext's SHA-256 digest with the expected digest before treating recovery as successful.
 
-### Resolved 2026-10-13 — the transport, and the verified hosted path
+This is an **end-to-end content-integrity safeguard**, not a transport-security replacement:
+- It helps detect tampering that would make the recovered key/content incorrect; failed authentication must fail closed.
+- ECIES encryption of validator partials to the reader's ephemeral public key helps protect the partials' confidentiality from an observer who lacks the ephemeral private key.
+- It does **not** encrypt the HTTP connection, hide request metadata, guarantee the keeper's identity, prevent denial of service, or prove that every response from the keeper is authentic.
+- A matching digest proves the recovered plaintext matches the expected bytes; it does not by itself secure the HTTP transport.
 
-The real blocker was always narrower than either wrong turn suggested: **the endpoint is plain
-HTTP, and a page served over HTTPS cannot call it** — the browser blocks the request as mixed
-content before it leaves the tab.
+### Required failure behavior
 
-`app/api/cdr/[...path]/route.ts` closes it. It terminates TLS on our own origin and forwards to
-the keeper; the browser then calls `/api/cdr/...` same-origin. It is deliberately not an open
-proxy: the upstream is a module constant never derived from the request, only the six `/dkg/*`
-paths the SDK calls are forwarded from an exact table, only the parameters each endpoint declares
-are copied, GET is the only method, and no inbound header crosses — not `cookie`, not
-`authorization`. Every test asserts on **what was actually sent upstream**, since a route that
-refuses after fetching would already have leaked reach.
+A timeout, dropped/altered partial, malformed response, failed AES-GCM authentication, or hash mismatch is a verification/infrastructure/decryption failure — **never** a licence denial and never `ACCESS GRANTED`. Only the real on-chain licensing condition is authoritative for the access decision.
 
-**Reachability from the deployed host was measured, not assumed** — which audit §4.1 explicitly
-requires, because local reachability proves nothing about Vercel's network:
+### Evidence and next steps
 
-| Endpoint, via `https://licensevault.vercel.app/api/cdr` | Result |
-|---|---|
-| `/dkg/global_public_key` | `code=200`, `cd262522f2b25d3d…` — byte-identical to the direct call |
-| `/dkg/latest_active` | `code=200`, round **46**, 20 validators |
-| `/dkg/dkg_network?round=46` | `code=200` |
-| `/dkg/registrations?round=46` | `code=200`, 5 registrations |
-| `/dkg/registrations/verified?round=46` | `code=200` |
-| `/dkg/cdr_partials?uuid=11062&…` | keeper's own `code=500` validation error — the parameters arrived and were processed |
-| `/dkg/latest_active` vs the keeper directly | **byte-identical, 1352 bytes** |
-| `/shutdown`, `/dkg/../../admin`, `/etc/passwd` | `404`, not forwarded |
-| `POST` | `405` |
+The repository records successful reads through the deployed proxy, but successful operation is not proof that the upstream hop is secure. Closing this risk requires a verified official TLS endpoint or a TLS-enabled gateway under trusted control. Until one is available and tested, the plain-HTTP hop remains an explicit open risk and must be described as such in the submission.
 
-**What is still open, stated plainly:** the hop from Vercel to the keeper is plain HTTP over the
-public internet. Our origin is HTTPS on both sides of the browser, so the mixed-content block is
-gone — but the *server-to-keeper* leg is not encrypted, and the SDK's own docs say it "trusts the
-keeper at the same level as any other authoritative chain RPC read." A hostile network on that
-leg can read queries and deny availability; it cannot forge content (see the table below). Closing
-that leg means running our own `:1317` gateway or a TLS terminator in front of it — infrastructure
-we do not have on a $0 budget, and honestly reported as such rather than described as solved.
-
-**What this unlocks.** The browser can now reach every endpoint the protected read needs.
-
-**The endpoint is in the trust path — this is stated by the SDK, not inferred.** The published
-`Consumer` docs say partials come from `/dkg/cdr_partials`, that the keeper verifies each
-validator's signature on ingress and *drops the signature bytes*, and that **"the SDK trusts
-the keeper at the same level as any other authoritative chain RPC read."** So the transport is
-unauthenticated and the SDK is relying on that host being honest and available.
-
-**What that does and does not expose** (worked through in `docs/PROTOCOL_DISCOVERY.md` §7):
-
-| Property | Holds | Basis |
-|---|---|---|
-| Confidentiality of the data key | ✅ | Partials are ECIES-encrypted to the reader's ephemeral public key; the private key never leaves the client. Intercepting a partial reveals nothing usable. |
-| Integrity of recovered content | ✅ | The SDK's own text: a misrouted partial "would not yield a meaningful ECIES decryption… the resulting garbage bytes would propagate through `tdh2Combine` and ultimately fail at the outermost AES-GCM auth check." The vault ciphertext is read from chain, not from this endpoint. Tampering **fails closed**. |
-| Availability of a read | ❌ | An attacker — or the endpoint simply being down or moved — can prevent the poll reaching threshold, timing out the read. |
-| Authorization deniability | ✅ | The gate is `LicenseReadCondition`, evaluated on chain before the read transaction. The REST host serves partials only after the chain has already permitted the read. |
-
-**Consequence the code must encode.** A failure on this path is `INFRASTRUCTURE_FAILURE`, and
-must **never** become `NO_LICENSE`. A dropped partial is not a missing licence. This is the
-concrete scenario that rule exists for; `classifyThrownError` routes timeouts to
-`INFRASTRUCTURE_FAILURE` and `tests/state.test.ts` pins it.
-
-**Mitigations already in place.** `apiUrl` is a constructor parameter, not a constant;
-`CDR_API_URL_AENEID` records the documented default, and `.env.example` exposes `CDR_API_URL`
-so it can be repointed without a code change. The endpoint is treated as an operational
-dependency that can move, not as a fixed address.
-
-**Available but not yet adopted.** `collectPartials` / `accessCDR` accept `attestationConfig`,
-which verifies each validator's SGX enclave (MRENCLAVE / MRSIGNER / SVN) before accepting a
-partial and reports untrusted ones via `onInvalidPartial`. The docs note the attestation
-reports come from the per-round cache, so this adds no request. **Decision deferred to
-BUILD 8** — it hardens against a dishonest validator, which is a related but distinct concern
-from a dishonest transport, and it is not needed to demonstrate the mechanism.
-
-**Resolution taken (2026-10-13).** Option 2 — front the endpoint with TLS on infrastructure we
-control — is what `app/api/cdr/[...path]/route.ts` does, using the deployment we already have
-rather than new infrastructure. Options 1 and 3 remain open as follow-ups:
-
-1. ✅ **Test reachability from a Vercel serverless function** — done, reachable, table above.
-2. ✅ **Front the endpoint with TLS on infrastructure we control** — done, the proxy route.
-3. ⬜ Re-read the docs at `docs.datafdn.org` (note: `docs.story.foundation` currently serves an
-   **expired certificate**) to check whether an official TLS endpoint has appeared.
-
-**Per build-spec §7: if neither were viable, the correct outcome would be to report `BLOCKED`,
-not to invent a workaround.** They were viable, so the read path is not blocked — but the
-remaining plain-HTTP server-to-keeper leg is reported here rather than glossed, and a reader
-should treat the availability property above as still unmitigated.
 
 ---
 
