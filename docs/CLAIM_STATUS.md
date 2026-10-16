@@ -1,7 +1,7 @@
 # CLAIM STATUS
 
 **Project:** LicenseVault
-**Last updated:** 2026-10-05
+**Last updated:** 2026-10-16
 
 Allowed statuses, per build-spec §25:
 `PROVEN` · `OBSERVED` · `INFERRED` · `UNVERIFIED` · `UNSUPPORTED`
@@ -27,10 +27,10 @@ Allowed statuses, per build-spec §25:
 | 4 | LicenseReadCondition is deployed on Aeneid | PROVEN | `eth_getCode` non-empty at `0xC064…f7a3`; address documented in official CONDITIONS.md |
 | 5 | OwnerWriteCondition is deployed on Aeneid | PROVEN | `eth_getCode` non-empty at `0x4C9b…c34B` |
 | 6 | The CDR SDK can be configured with a custom API endpoint | PROVEN | `apiUrl` is a required constructor parameter in the published `client.d.ts` |
-| 7 | A license-gated read is possible via CDR conditions | OBSERVED | described in official `docs/CONDITIONS.md`; **not yet reproduced by us** |
+| 7 | A license-gated read is possible via CDR conditions | PROVEN | Live Aeneid condition probes are recorded in `gate-probes.json`; later successful CDR read and browser-side manifest recovery are recorded in `PROGRESS.md` |
 | 8 | The published CDR SDK (0.2.2) can mint a Story license token itself | **UNSUPPORTED** | the documented `client.license.mintLicenseToken` is absent from the published package — see PROTOCOL_DISCOVERY.md §6 |
-| 9 | A TLS Story-API endpoint exists | UNVERIFIED | only a plain-HTTP raw-IP endpoint is documented, and the docs actively advise self-hosting for production. Note the exposure is availability, not confidentiality — see SECURITY.md §5 |
-| 10 | Vercel can reach the CDR Story-API endpoint | UNVERIFIED | not yet tested |
+| 9 | A TLS Story-API endpoint exists | UNVERIFIED | The configured upstream remains plain HTTP; the app exposes a same-origin HTTPS proxy. See SECURITY.md §5 |
+| 10 | Vercel can reach the CDR Story-API endpoint | PROVEN | Successful real CDR read and partial collection through the deployed proxy are recorded in `PROGRESS.md`; upstream remains plain HTTP |
 | 10a | The Aeneid explorer is `https://aeneid.datanetscan.io` | **PROVEN** | its block feed matched the Aeneid RPC head (24525035) at the same moment, and `GET /tx/<hash>` served a real tx that `eth_getTransactionByHash` confirmed — 2026-10-05 |
 | 10b | A working Aeneid faucet route exists | **PROVEN** (route) / UNVERIFIED (amount) | `https://faucet.quicknode.com/story` is HTTP 200 and its page declares Story Aeneid + chain 1315. The drip quantity is NOT verified — sources conflict and the faucet's own copy omits it |
 | 10c | The official docs' CDR address casing is valid | **DISPROVEN** | `0xCcCcCC…05` fails EIP-55. Our corrected constant `0xCCCcCC…05` is pinned by a test. The address bytes are identical — this is a docs typo, not a different contract |
@@ -40,12 +40,12 @@ Allowed statuses, per build-spec §25:
 
 | # | Claim | Status | Evidence / note |
 |---|---|---|---|
-| 11 | LicenseVault reproduces the gated read | **UNVERIFIED** | this is the BUILD 2–4 gate; no code exists yet |
-| 12 | An unauthorized wallet is actually blocked | **UNVERIFIED** | must be shown by a real reverted read, not by UI copy |
-| 13 | An authorized wallet actually succeeds | **UNVERIFIED** | must be shown by a real recovered plaintext |
-| 14 | The access decision is produced by the protocol, not the UI | **UNVERIFIED** | architectural intent; proven only once #11–13 hold with the UI absent |
+| 11 | LicenseVault reproduces the gated read | **OBSERVED** | Successful real CDR read, 804-byte manifest decryption, and matching SHA-256 recorded in `PROGRESS.md`; a fresh independent replay remains pending |
+| 12 | An unauthorized wallet is actually blocked | **PROVEN** | Read-only live condition probe returned `false` for a non-holder presenting the same real token; see `gate-probes.json`. This proves the condition verdict, not a separately submitted failed CDR read |
+| 13 | An authorized wallet actually succeeds | **OBSERVED** | Real CDR read recovered a data key; browser decrypted the 804-byte manifest and matched the expected SHA-256. Independent replay pending |
+| 14 | The access decision is produced by the protocol, not the UI | **OBSERVED** | On-chain condition probe gives distinct holder/non-holder verdicts; the successful read also completed through CDR. Fresh independent replay pending |
 | 15 | The core demo path costs $0 | UNVERIFIED | testnet gas is free-of-charge but requires faucet funds. The faucet ROUTE is now verified (#10b); the amount is not. The $0 claim still needs a real funded run to hold — see COST_MATRIX.md |
-| 16 | The gated flow is reproducible by a third party | **UNVERIFIED** | requires the verifier + evidence tree to exist first |
+| 16 | The gated flow is reproducible by a third party | **UNVERIFIED** | The current successful run is documented, but a fresh independent third-party replay of the complete browser flow has not been established |
 
 ## Claims we explicitly DO NOT make
 
