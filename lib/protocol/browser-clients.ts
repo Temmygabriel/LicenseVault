@@ -95,6 +95,32 @@ export interface DemoLicenseMint {
 }
 
 /**
+ * Parse the fee amount returned by Story SDK's predictMintingLicenseFee.
+ * SDK v1.4.4 documents `tokenAmount`; tolerate the older wrapper field as well.
+ * Fail closed when the SDK response is missing or malformed.
+ */
+export function parsePredictedMintingFee(feeQuote: Record<string, unknown>): bigint {
+  const rawFee = feeQuote["tokenAmount"] ?? feeQuote["tokenMintingFee"];
+  if (
+    rawFee === undefined ||
+    rawFee === null ||
+    (typeof rawFee !== "string" && typeof rawFee !== "number" && typeof rawFee !== "bigint")
+  ) {
+    throw new Error("The current mint fee could not be verified from the Story SDK response.");
+  }
+  let fee: bigint;
+  try {
+    fee = BigInt(String(rawFee));
+  } catch {
+    throw new Error("The current mint fee could not be verified from the Story SDK response.");
+  }
+  if (fee < 0n) {
+    throw new Error("The current mint fee could not be verified from the Story SDK response.");
+  }
+  return fee;
+}
+
+/**
  * Mint one real token for the already-published demo terms. The IP's recorded public Commercial
  * Use terms have a zero minting fee; the user still signs the transaction and pays network gas.
  * Ownership is checked on-chain before the function returns.
@@ -136,9 +162,11 @@ export async function mintDemoLicenseForWallet(address: Address): Promise<DemoLi
   }) as unknown as Record<string, unknown>;
   let quotedFee: bigint;
   try {
-    quotedFee = BigInt(String(feeQuote["tokenMintingFee"]));
+    // Story SDK v1.4.4 returns { currencyToken, tokenAmount }. The former implementation
+    // only read tokenMintingFee, so BigInt("undefined") aborted before the wallet prompt.
+    quotedFee = parsePredictedMintingFee(feeQuote);
   } catch {
-    throw new Error("The current mint fee could not be verified. No mint transaction was submitted.");
+    throw new Error("The current mint fee could not be verified from the Story SDK response. No mint transaction was submitted.");
   }
   if (quotedFee !== 0n) {
     throw new Error("The licensing contract quotes a non-zero mint fee. No demo-license mint was submitted; request a free license instead.");
