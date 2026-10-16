@@ -34,7 +34,7 @@ const pathsPath = join(
 const loader = readFileSync(loaderPath, "utf8");
 const paths = readFileSync(pathsPath, "utf8");
 
-if (!loader.includes("loadExternalModule")) {
+if (!loader.includes('new Function("specifier", "return import(specifier);")')) {
   throw new Error("CDR loader was not patched to use a native runtime import.");
 }
 if (loader.includes('import(wasmShimSpecifier)')) {
