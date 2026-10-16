@@ -54,7 +54,7 @@ const nativeImport =
 // The published JS strips TypeScript's type assertion, so patch the emitted JS
 // form rather than matching the TypeScript source text from the SDK repository.
 const importPatterns = [
-  /const shim\\s*=\\s*[^;\\n]*import\\(wasmShimSpecifier\\)[^;\\n]*;/,
+  /const shim\s*=\s*[^;\n]*import\(wasmShimSpecifier\)[^;\n]*;/,
 ];
 
 let patched = false;
