@@ -48,15 +48,30 @@ if (!pathsSource.includes('"/cdr-wasm/cb-mpc-tdh2.mjs"')) {
 writeFileSync(pathsPath, pathsSource);
 
 let loaderSource = readFileSync(loaderPath, "utf8");
-const dynamicImport =
-  'const shim = (await import(wasmShimSpecifier)) as { default: CreateCbMpcModule };';
 const nativeImport =
-  'const loadExternalModule = new Function("specifier", "return import(specifier);") as (specifier: string) => Promise<{ default: CreateCbMpcModule }>;\n    const shim = await loadExternalModule(wasmShimSpecifier);';
+  'const shim = await new Function("specifier", "return import(specifier);")(wasmShimSpecifier);';
 
-if (loaderSource.includes(dynamicImport)) {
-  loaderSource = loaderSource.replace(dynamicImport, nativeImport);
-} else if (!loaderSource.includes("loadExternalModule")) {
-  throw new Error("The installed CDR loader changed shape; refusing to patch it blindly.");
+// The published JS strips TypeScript's type assertion, so patch the emitted JS
+// form rather than matching the TypeScript source text from the SDK repository.
+const importPatterns = [
+  /const shim = \\(await import\\(wasmShimSpecifier\\)\\);/,
+  /const shim = await import\\(wasmShimSpecifier\\);/,
+  /const shim = \\(await import\\(wasmShimSpecifier\\)\\) as \\{ default: CreateCbMpcModule \};/,
+];
+
+let patched = false;
+for (const pattern of importPatterns) {
+  if (pattern.test(loaderSource)) {
+    loaderSource = loaderSource.replace(pattern, nativeImport);
+    patched = true;
+    break;
+  }
+}
+
+if (!patched && !loaderSource.includes('new Function("specifier", "return import(specifier);")')) {
+  throw new Error(
+    "Could not find the known CDR WASM import in the installed loader; refusing to patch an unknown SDK version.",
+  );
 }
 
 writeFileSync(loaderPath, loaderSource);
