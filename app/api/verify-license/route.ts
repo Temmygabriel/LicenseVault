@@ -27,7 +27,7 @@ import { NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
 import { CANONICAL_VAULT } from "@/lib/protocol/canonical-vault";
-import { EXPECTED_CHAIN_ID, createAeneidPublicClient } from "@/lib/protocol/clients";
+import { EXPECTED_CHAIN_ID, createAeneidPublicClient } from "@/lib/protocol/public-clients";
 import { encodeLicenseAccessAuxData } from "@/lib/protocol/conditions";
 import { probeReadCondition } from "@/lib/protocol/gate";
 import { redactInfrastructureDetail } from "@/lib/access/redact";
@@ -78,12 +78,6 @@ function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The outbound-call budget.
-//
-// This endpoint makes an RPC call on every request, which makes it a way to spend somebody
-// else's rate limit. The call itself cannot be redirected — the contract address is fixed in
-// `canonical-vault.ts` and the caller supplies only a wallet address — so this is about
-// availability, not about reach. `lib/access/rate-limit.ts` carries the full warning about what
-// this counter is and is not; the short version is that it is not a security boundary.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const limiter = createLimiter({
@@ -135,9 +129,6 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     const publicClient = createAeneidPublicClient();
 
-    // Assert the chain before reading from it. A check that came back from the wrong network
-    // would be a verdict about a different world, and the whole point of this route is that
-    // the answer is attributable.
     const chainId = await publicClient.getChainId();
     if (chainId !== EXPECTED_CHAIN_ID) {
       return respond(
@@ -162,10 +153,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       `the read condition did not answer within ${PROBE_TIMEOUT_MS}ms`,
     );
 
-    // The verdict is the whole answer, and it is fully wire-safe (strings and nulls only), so
-    // it crosses as itself. The client turns it into a state-machine event with the same pure
-    // mapper the tests exercise — `eventForVerdict` in `lib/access/verify.ts` — which keeps the
-    // bigint evidence typed instead of round-tripping integers through JSON.
     return respond(
       {
         verdict,
@@ -176,13 +163,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       200,
     );
   } catch (caught) {
-    // An unreachable RPC is not a statement about anyone's rights.
     const detail = caught instanceof Error ? caught.message : String(caught);
-
-    // The operator gets the whole message; the caller gets it with endpoints and long tokens
-    // removed. A viem error names the URL it failed to reach, and hosted RPC providers put the
-    // API key in that URL — so returning it verbatim would let any anonymous caller read the
-    // operator's RPC credential by making the RPC fail. See `lib/access/redact.ts`.
     console.error("[verify-license] infrastructure failure:", detail);
 
     return respond(
