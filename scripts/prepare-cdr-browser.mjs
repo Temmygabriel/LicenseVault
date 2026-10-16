@@ -54,9 +54,9 @@ const nativeImport =
 // The published JS strips TypeScript's type assertion, so patch the emitted JS
 // form rather than matching the TypeScript source text from the SDK repository.
 const importPatterns = [
-  /const shim = \\(await import\\(wasmShimSpecifier\\)\\);/,
-  /const shim = await import\\(wasmShimSpecifier\\);/,
-  /const shim = \\(await import\\(wasmShimSpecifier\\)\\) as \\{ default: CreateCbMpcModule \};/,
+  /const shim = \(await import\(wasmShimSpecifier\)\);/,
+  /const shim = await import\(wasmShimSpecifier\);/,
+  /const shim = \(await import\(wasmShimSpecifier\)\) as \{ default: CreateCbMpcModule \};/,
 ];
 
 let patched = false;
