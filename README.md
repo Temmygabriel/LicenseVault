@@ -17,22 +17,9 @@ Open it and paste `0x226e01730F6991C1BD11f58d1204638bee89A863` (the recorded lic
 answers come from a real `eth_call` to the vault's read condition on live Aeneid, made by the
 deployed server with **no key, no gas and no signature**.
 
-Being precise about what that means: the page verifies **the licence**, it does not decrypt. The
-end-to-end unlock — a real read that returns a data key, then content decrypted byte for byte — was
-executed on live Aeneid and is recorded in `evidence/licensevault-aeneid-001/`, and it ran from the
-CLI harness. The browser read path is **not wired up yet**, so the strongest state the site can
-reach is `LICENSE VERIFIED`, and it will never print `ACCESS GRANTED` without a real decryption
-succeeding. See `docs/LIMITATIONS.md`.
+The browser now supports the complete protected-read workflow: wallet connection, licence verification, signing the CDR read, recovering and decrypting the manifest, and verifying its SHA-256 digest. The successful browser run reported a 32-byte data key, decrypted the 804-byte manifest, and matched the expected digest `46cab4a8232e4eea226500b424416a353618c8606008d374dbb15f56bc864cd7`. The recovered payload is a JSON delivery manifest, **not the five individual files listed inside it**; see [asset provenance](./docs/ASSET_PROVENANCE.md) and [limitations](./docs/LIMITATIONS.md).
 
-> **Correction, 2026-10-13.** This paragraph used to say the unlock "needs a funded signer and so
-> runs from the CLI harness, not from the browser." That was **wrong**. A CDR read is fee-bearing,
-> but it is signed by a `walletClient` — the user's own wallet — so it is exactly the kind of
-> operation a browser is supposed to perform, and no key of ours belongs anywhere near it. The
-> decryption needs no persistent key either: the SDK generates an ephemeral keypair and zeroes it
-> after use. The real blocker was that the CDR keeper API is plain HTTP, which a HTTPS page cannot
-> call; `app/api/cdr/[...path]/route.ts` now proxies it over TLS, verified reachable from the
-> deployment. What is missing is implementation work in the UI, not an architectural impossibility.
-> `docs/SECURITY.md` §5 has the full correction.
+The read is a real CDR protocol operation, not a simulated UI state. The browser wallet signs the operation; the app does not ask for or receive the user's private key. A read may require testnet gas and protocol fees depending on the live protocol configuration. The successful run reported a zero CDR protocol read fee, with gas separate. The separate read-only gate probes in `evidence/licensevault-aeneid-001/gate-probes.json` show a holder allowed and a non-holder denied by the on-chain condition; those probes are `eth_call` checks, not protected-read transactions.
 
 ---
 
@@ -62,30 +49,11 @@ The protocol produces the access decision. The interface only explains it.
 
 ---
 
-## Status — read this before judging the demo
+## Current demo status
 
-This repository is being built strictly in the phase order defined by
-[`LICENSEVAULT_BUILD_SPEC.md`](./LICENSEVAULT_BUILD_SPEC.md). The build contract forbids
-building the polished frontend before the real protocol spike passes.
+The deployed app has completed the browser flow for the configured demo resource. The successful run reached all five checkpoints: wallet connection, licence verification, signed CDR read, manifest recovery/decryption, and content hash verification. The manifest hash matched the expected SHA-256 digest. The UI exposes a download of the recovered manifest after successful verification.
 
-| Phase | | Status |
-|---|---|---|
-| BUILD 0 | Repo + environment | ✅ done |
-| BUILD 1 | Protocol discovery | ✅ done — every fact verified against live chain state |
-| BUILD 2 | Real protected resource on Aeneid | ⬜ next |
-| BUILD 3 | Unauthorized read rejection | ⬜ |
-| BUILD 4 | Real licensed access | ⬜ |
-| BUILD 5 | Evidence + independent verifier | ⬜ |
-| BUILD 6 | Core application | ⬜ |
-| BUILD 7 | Visual implementation | ⬜ |
-| BUILD 8 | Security / hardening | ⬜ |
-| BUILD 9 | Vercel deployment | ⬜ |
-| BUILD 10 | Demo / submission | ⬜ |
-
-**What exists right now is real, but it is not yet the product.** The landing page shows the
-Access Docket in its `RESTRICTED` state with the primary action deliberately **disabled**,
-because no protected vault has been created on Aeneid yet and therefore no real access
-decision exists to report. See [`PROGRESS.md`](./PROGRESS.md) for the live state.
+This is a **testnet MVP**, not a production rights-management system. It gates access to one fictional resource's encrypted JSON manifest on Story Aeneid (chain 1315). The manifest lists five asset files as metadata; those individual SVG, EPS, palette, and PDF binaries are not part of the protected payload. See [limitations](./docs/LIMITATIONS.md), [security model](./docs/SECURITY.md), and [asset provenance](./docs/ASSET_PROVENANCE.md).
 
 ---
 
