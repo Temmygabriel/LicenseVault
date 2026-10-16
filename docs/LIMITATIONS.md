@@ -79,21 +79,11 @@ progress bar.
 confirmed, the Proof surface shows identifiers without links. Fabricating an explorer URL
 from a transaction hash is forbidden by the build contract.
 
-**The browser read flow is not implemented yet.** The live page verifies the licence and stops
-there. This is **an implementation gap, not an architectural one**, and the distinction matters
-because an earlier version of this file got it wrong in both directions:
+**Browser read flow implemented and demonstrated.** The deployed app has completed wallet connection, licence verification, a wallet-signed CDR read, data-key recovery, browser-side decryption of the JSON manifest, and SHA-256 verification. The successful run reported a 32-byte data key, 804 decrypted bytes, and a digest matching `46cab4a8232e4eea226500b424416a353618c8606008d374dbb15f56bc864cd7`. This replaces earlier statements in this document and older README text that said the browser read path was not implemented.
 
-- It said a browser read needs "a funded account". A CDR read **is** fee-bearing, but it is signed
-  by a `walletClient` — the *visitor's own wallet*. That is the correct signer, not a secret we
-  hold, and paying for your own read is exactly what a wallet is for. No key of ours goes near it.
-- It said the keeper API sits on "a private-range IP a deployed server cannot reach".
-  `172.192.41.96` is a **public IP**, and the deployment **does** reach it — measured, not assumed.
+**The protected payload is only the manifest.** The five entries (two SVGs, an EPS wordmark, a palette file, and a PDF guide) are metadata describing a fictional brand pack. Those individual binaries are not included in the sealed payload and were not decrypted or delivered by this MVP.
 
-The genuine barrier was that the keeper API is plain HTTP and an HTTPS page cannot call it. That is
-now closed by `app/api/cdr/[...path]/route.ts`, which terminates TLS on our origin and forwards to
-the keeper over a constrained, allowlisted path. So what remains before the page can perform a real
-protected read and decrypt is UI work. Until it lands, the strongest state the site can reach is
-`LICENSE VERIFIED` and it never prints `ACCESS GRANTED`. Full correction: `docs/SECURITY.md` §5.
+**Evidence freshness.** The committed gate-probe artifact is dated 2026-10-07 and uses token ID `73227`; it is a read-only condition check, not a protected-read transaction. The later browser demo used a separately minted token ID `73228`. Do not treat the old probe as a fresh check of today's chain state or as evidence for the browser read transaction itself.
 
 **The server-to-keeper leg is still plain HTTP.** The browser talks HTTPS to our origin and our
 origin talks plain HTTP to the keeper. Confidentiality of the recovered content does not depend on
