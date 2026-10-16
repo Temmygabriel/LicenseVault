@@ -21,7 +21,9 @@
     "ui:overflow": "node tools/overflow-probe.mjs",
     "ui:capture": "node tools/ui-capture.mjs",
     "verify:transport": "tsx tools/verify-cdr-transport.ts",
-    "verify:read": "tsx tools/verify-live-read.ts"
+    "verify:read": "tsx tools/verify-live-read.ts",
+    "verify:browser-cdr": "node scripts/verify-cdr-browser.mjs",
+    "prebuild": "node scripts/prepare-cdr-browser.mjs"
   },
   "dependencies": {
     "@piplabs/cdr-contracts": "0.2.2",
